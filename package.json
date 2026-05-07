@@ -1,0 +1,28 @@
+{
+  "name": "primepath-travel",
+  "version": "1.0.0",
+  "dependencies": {
+    "@sap/cds": "^9",
+    "@sap-cloud-sdk/connectivity": "^4",
+    "@sap-cloud-sdk/http-client": "^4",
+    "@sap-cloud-sdk/resilience": "^4"
+  },
+  "devDependencies": {
+    "@cap-js/sqlite": "^2"
+  },
+  "scripts": {
+    "start": "cds-serve"
+  },
+  "private": true,
+  "cds": {
+    "requires": {
+      "TripPin": {
+        "kind": "odata-v4",
+        "model": "srv/external/TripPin",
+        "credentials": {
+          "url": "https://services.odata.org/V4/TripPinService"
+        }
+      }
+    }
+  }
+}

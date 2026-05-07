@@ -1,0 +1,49 @@
+{
+    "xsappname": "primepath-travel",
+    "tenant-mode": "dedicated",
+    "scopes": [
+        {
+            "name": "$XSAPPNAME.TravelCoordinator",
+            "description": "Kan trips aanmaken, goedkeuren en extensievelden beheren"
+        },
+        {
+            "name": "$XSAPPNAME.TeamLead",
+            "description": "Kan eigen team en hun trips bekijken"
+        },
+        {
+            "name": "$XSAPPNAME.HR",
+            "description": "Kan rapportages en statistieken bekijken"
+        }
+    ],
+    "role-templates": [
+        {
+            "name": "TravelCoordinator",
+            "description": "Travel Coordinator rol",
+            "scope-references": [ "$XSAPPNAME.TravelCoordinator" ]
+        },
+        {
+            "name": "TeamLead",
+            "description": "Team Lead rol",
+            "scope-references": [ "$XSAPPNAME.TeamLead" ]
+        },
+        {
+            "name": "HR",
+            "description": "HR medewerker rol",
+            "scope-references": [ "$XSAPPNAME.HR" ]
+        }
+    ],
+    "role-collections": [
+        {
+            "name": "PrimePath-TravelCoordinator",
+            "role-template-references": [ "$XSAPPNAME.TravelCoordinator" ]
+        },
+        {
+            "name": "PrimePath-TeamLead",
+            "role-template-references": [ "$XSAPPNAME.TeamLead" ]
+        },
+        {
+            "name": "PrimePath-HR",
+            "role-template-references": [ "$XSAPPNAME.HR" ]
+        }
+    ]
+}

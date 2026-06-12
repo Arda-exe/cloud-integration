@@ -12,6 +12,36 @@
         "description": "{{appDescription}}",
         "applicationVersion": {
             "version": "1.0.0"
+        },
+        "dataSources": {
+            "peopleService": {
+                "uri": "/people/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
+            },
+            "tripsService": {
+                "uri": "/trips/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
+            },
+            "airlinesService": {
+                "uri": "/airlines/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
+            },
+            "airportsService": {
+                "uri": "/airports/",
+                "type": "OData",
+                "settings": {
+                    "odataVersion": "4.0"
+                }
+            }
         }
     },
     "sap.ui": {
@@ -48,6 +78,38 @@
                     "supportedLocales": [""],
                     "fallbackLocale": ""
                 }
+            },
+            "people": {
+                "dataSource": "peopleService",
+                "settings": {
+                    "autoExpandSelect": true,
+                    "operationMode": "Server",
+                    "earlyRequests": true
+                }
+            },
+            "trips": {
+                "dataSource": "tripsService",
+                "settings": {
+                    "autoExpandSelect": true,
+                    "operationMode": "Server",
+                    "earlyRequests": true
+                }
+            },
+            "airlines": {
+                "dataSource": "airlinesService",
+                "settings": {
+                    "autoExpandSelect": true,
+                    "operationMode": "Server",
+                    "earlyRequests": true
+                }
+            },
+            "airports": {
+                "dataSource": "airportsService",
+                "settings": {
+                    "autoExpandSelect": true,
+                    "operationMode": "Server",
+                    "earlyRequests": true
+                }
             }
         },
         "routing": {
@@ -73,6 +135,11 @@
                     "target": "employees"
                 },
                 {
+                    "name": "employee",
+                    "pattern": "employees/{userName}",
+                    "target": "employee"
+                },
+                {
                     "name": "airports",
                     "pattern": "airports",
                     "target": "airports"
@@ -86,6 +153,10 @@
                 "employees": {
                     "name": "Employees",
                     "viewId": "employees"
+                },
+                "employee": {
+                    "name": "EmployeeDetail",
+                    "viewId": "employeeDetail"
                 },
                 "airports": {
                     "name": "Airports",

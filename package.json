@@ -16,6 +16,23 @@
   "private": true,
   "cds": {
     "requires": {
+      "auth": {
+        "kind": "mocked",
+        "users": {
+          "coordinator": {
+            "password": "test",
+            "roles": ["TravelCoordinator"]
+          },
+          "teamlead": {
+            "password": "test",
+            "roles": ["TeamLead"]
+          },
+          "hr": {
+            "password": "test",
+            "roles": ["HR"]
+          }
+        }
+      },
       "TripPin": {
         "kind": "odata-v4",
         "model": "srv/external/TripPin",

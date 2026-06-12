@@ -6,7 +6,7 @@
     xmlns:f="sap.f"
     xmlns="sap.m">
 
-    <VBox height="100%" renderType="Bare">
+    <VBox height="100vh" renderType="Bare">
 
         <f:ShellBar
             title="{i18n>shellTitle}" />

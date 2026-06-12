@@ -11,7 +11,7 @@ sap.ui.define([
 
         init: function () {
             UIComponent.prototype.init.apply(this, arguments);
-            // router wordt in stap 2 (routing) geïnitialiseerd
+            this.getRouter().initialize();
         }
     });
 });

@@ -13,11 +13,18 @@
         data-sap-ui-on-init="module:sap/ui/core/ComponentSupport"
         data-sap-ui-resource-roots='{"primepath.dashboard": "./"}'>
     </script>
+    <style>
+        /* de app-shell (VBox) gebruikt 100vh; alleen de body-marge moet weg */
+        html, body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
 </head>
 <body class="sapUiBody" id="content">
-    <div data-sap-ui-component
+    <div id="container"
+         data-sap-ui-component
          data-name="primepath.dashboard"
-         data-id="container"
          data-settings='{"id": "dashboard"}'></div>
 </body>
 </html>

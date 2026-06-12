@@ -49,6 +49,49 @@
                     "fallbackLocale": ""
                 }
             }
+        },
+        "routing": {
+            "config": {
+                "routerClass": "sap.m.routing.Router",
+                "type": "View",
+                "viewType": "XML",
+                "path": "primepath.dashboard.view",
+                "controlId": "content",
+                "controlAggregation": "pages",
+                "transition": "show",
+                "async": true
+            },
+            "routes": [
+                {
+                    "name": "overview",
+                    "pattern": "",
+                    "target": "overview"
+                },
+                {
+                    "name": "employees",
+                    "pattern": "employees",
+                    "target": "employees"
+                },
+                {
+                    "name": "airports",
+                    "pattern": "airports",
+                    "target": "airports"
+                }
+            ],
+            "targets": {
+                "overview": {
+                    "name": "Overview",
+                    "viewId": "overview"
+                },
+                "employees": {
+                    "name": "Employees",
+                    "viewId": "employees"
+                },
+                "airports": {
+                    "name": "Airports",
+                    "viewId": "airports"
+                }
+            }
         }
     }
 }

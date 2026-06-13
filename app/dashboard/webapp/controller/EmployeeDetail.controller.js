@@ -1,9 +1,7 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
-    "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator"
-], function (Controller, JSONModel, Filter, FilterOperator) {
+    "sap/ui/model/json/JSONModel"
+], function (Controller, JSONModel) {
     "use strict";
 
     return Controller.extend("primepath.dashboard.controller.EmployeeDetail", {
@@ -15,30 +13,27 @@ sap.ui.define([
 
         onPatternMatched: function (oEvent) {
             var sUserName = oEvent.getParameter("arguments").userName;
-            this._sUserName = sUserName;
+            var oView = this.getView();
 
-            // Laad employee details
-            this.getView().bindElement({
-                path: "people>/People('" + encodeURIComponent(sUserName) + "')"
+            // Reset binding eerst zodat oude data weg is
+            oView.unbindElement("people");
+
+            // Dan nieuwe binding zetten
+            oView.bindElement({
+                path: "people>/People('" + encodeURIComponent(sUserName) + "')",
+                parameters: { $select: "UserName,FirstName,LastName,Emails" }
             });
 
-            // Laad trips voor deze persoon
             this._loadTrips(sUserName);
         },
 
         _loadTrips: function (sUserName) {
             var oView = this.getView();
-            var oTripsModel = this.getOwnerComponent().getModel("trips");
-
-            oTripsModel.bindList("/PersonTrips", null, null, [
-                new Filter("personUserName", FilterOperator.EQ, sUserName)
-            ]).requestContexts().then(function (aContexts) {
-                var aTrips = aContexts.map(function (oCtx) {
-                    return oCtx.getObject();
+            fetch("/trips/PersonTrips?$filter=personUserName eq '" + sUserName + "'")
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    oView.setModel(new JSONModel({ trips: data.value ?? [] }), "tripData");
                 });
-                var oModel = new JSONModel({ trips: aTrips });
-                oView.setModel(oModel, "tripData");
-            });
         },
 
         onNavBack: function () {

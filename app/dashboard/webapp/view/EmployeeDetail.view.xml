@@ -6,7 +6,7 @@
 
     <Page
         id="employeePage"
-        title="{i18n>employeeDetailTitle}"
+        title="Employee Detail"
         showNavButton="true"
         navButtonPress=".onNavBack">
 
@@ -16,14 +16,12 @@
                 intro="{people>UserName}">
                 <attributes>
                     <ObjectAttribute
-                        title="{i18n>lblEmail}"
+                        title="Email"
                         text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" />
                 </attributes>
             </ObjectHeader>
 
-            <Title
-                text="Trips"
-                class="sapUiMediumMarginBegin sapUiSmallMarginTop" />
+            <Title text="Trips" class="sapUiMediumMarginBegin sapUiSmallMarginTop" />
 
             <List
                 id="tripsList"
@@ -35,9 +33,7 @@
                     info="{path: 'tripData>StartsAt', formatter: '.formatDate'} - {path: 'tripData>EndsAt', formatter: '.formatDate'}"
                     infoState="None" />
             </List>
-
         </content>
-
     </Page>
 
 </mvc:View>

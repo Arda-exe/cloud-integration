@@ -82,8 +82,12 @@ sap.ui.define([
             var aBounds = [];
             this._aAllAirports.forEach(function (oAirport) {
                 // GeoJSON-volgorde is [lon, lat]; Leaflet verwacht [lat, lon]
-                var aCoords = oAirport.Location.Loc.coordinates;
-                var aLatLng = [aCoords[1], aCoords[0]];
+            var oLoc = oAirport.Location && oAirport.Location.Loc;
+            if (!oLoc || !oLoc.coordinates) {
+                return;
+            }
+            var aCoords = oLoc.coordinates;
+            var aLatLng = [aCoords[1], aCoords[0]];
                 var oMarker = window.L.marker(aLatLng)
                     .bindPopup("<b>" + oAirport.Name + "</b><br>"
                         + oAirport.IataCode + " &middot; " + oAirport.Location.City.Name)

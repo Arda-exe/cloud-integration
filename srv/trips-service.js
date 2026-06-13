@@ -1,18 +1,25 @@
 const cds = require('@sap/cds')
 
+const BASE = cds.env.requires?.TripPin?.credentials?.url
+    ?? 'https://services.odata.org/V4/TripPinService'
+
 module.exports = cds.service.impl(async function () {
-    const TripPin = await cds.connect.to('TripPin')
 
     this.on('READ', 'PersonTrips', async (req) => {
-        const where = req.query.SELECT?.where
-        const userNameEntry = where?.find((w, i) => w?.ref?.[0] === 'personUserName' && where[i+2]?.val)
-        const userName = userNameEntry ? where[where.indexOf(userNameEntry) + 2].val : null
+        const rawQuery = req._.req?.url?.split('?')[1] ?? ''
+        const userName = new URLSearchParams(rawQuery).get('personUserName')
+            ?? req._.req?.url?.match(/People\('([^']+)'\)/)?.[1]
 
         if (!userName) return []
 
-        const res = await fetch(`https://services.odata.org/V4/TripPinService/People('${userName}')/Trips`)
-        const data = await res.json()
-        return data.value ?? []
+        const query = rawQuery.replace(/personUserName[^&]*/g, '').replace(/^&|&$/g, '')
+        const url = query
+            ? `${BASE}/People('${userName}')/Trips?${query}`
+            : `${BASE}/People('${userName}')/Trips`
+
+        const res = await fetch(url)
+        const json = await res.json()
+        return json.value ?? []
     })
 
     this.on('approve', 'TripExtensions', async (req) => {

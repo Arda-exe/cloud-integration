@@ -7,8 +7,8 @@ service TripsService @(path: '/trips') {
     @readonly entity PersonTrips as projection on external.Trip;
 
     @restrict: [
-        { grant: ['READ'],                              to: 'TeamLead' },
-        { grant: ['READ'],                              to: 'HR' },
+        { grant: ['READ'],                                to: 'TeamLead' },
+        { grant: ['READ'],                                to: 'HR' },
         { grant: ['READ','WRITE','approve','rejectTrip'], to: 'TravelCoordinator' }
     ]
     entity TripExtensions as projection on primepath.TripExtension actions {

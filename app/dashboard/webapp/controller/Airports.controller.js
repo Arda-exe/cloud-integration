@@ -10,6 +10,7 @@ sap.ui.define([
         onInit: function () {
             this._aAllAirports = [];
             this._oMap = null;
+            this._mMarkers = {};
             this.getView().setModel(new JSONModel({ airports: [], count: 0 }), "view");
 
             this._loadAirports();
@@ -73,22 +74,38 @@ sap.ui.define([
         },
 
         _renderMarkers: function () {
-            if (!this._oMap || !this._aAllAirports.length) {
+            if (!this._oMap || !this._aAllAirports.length || this._bMarkersDone) {
                 return;
             }
+            this._bMarkersDone = true;
             var oMap = this._oMap;
             var aBounds = [];
             this._aAllAirports.forEach(function (oAirport) {
                 // GeoJSON-volgorde is [lon, lat]; Leaflet verwacht [lat, lon]
                 var aCoords = oAirport.Location.Loc.coordinates;
                 var aLatLng = [aCoords[1], aCoords[0]];
-                window.L.marker(aLatLng)
+                var oMarker = window.L.marker(aLatLng)
                     .bindPopup("<b>" + oAirport.Name + "</b><br>"
                         + oAirport.IataCode + " &middot; " + oAirport.Location.City.Name)
                     .addTo(oMap);
+                this._mMarkers[oAirport.IcaoCode] = { marker: oMarker, latlng: aLatLng };
                 aBounds.push(aLatLng);
-            });
+            }, this);
             oMap.fitBounds(aBounds, { padding: [30, 30] });
+        },
+
+        onAirportPress: function (oEvent) {
+            var oAirport = oEvent.getSource().getBindingContext("view").getObject();
+            this._focusAirport(oAirport.IcaoCode);
+        },
+
+        // inzoomen op één luchthaven; ook hergebruikt door de global search (stap 3)
+        _focusAirport: function (sIcao) {
+            var oEntry = this._mMarkers[sIcao];
+            if (oEntry && this._oMap) {
+                this._oMap.setView(oEntry.latlng, 9);
+                oEntry.marker.openPopup();
+            }
         },
 
         _onShown: function () {

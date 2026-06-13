@@ -41,6 +41,8 @@
             <Table
                 id="tripsTable"
                 items="{detail>/trips}"
+                busy="{detail>/busy}"
+                busyIndicatorDelay="200"
                 noDataText="{i18n>tripsNoData}">
 
                 <headerToolbar>

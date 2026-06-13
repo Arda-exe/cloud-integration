@@ -89,8 +89,12 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   `{people>/People}`. No anonymous default model.
 - **Feature 1 done — Employees**: searchable table (`Employees.view.xml`) with
   click-through to `EmployeeDetail.view.xml` (element binding on `/People('user')` via
-  route parameter). Search sends correct `$filter` but the backend ignores it (see
-  backend issues). `Emails` is a collection — bind with `targetType: 'any'` + formatter.
+  route parameter). The list loads once into a JSON `view` model (`bindList` +
+  `requestContexts`) and **search filters client-side** (contains on
+  FirstName/LastName/UserName) with a live count in the title — same pattern as Airports,
+  because the backend ignores `$filter` (issue 2); swap back to a server-side
+  `binding.filter()` on `{people>/People}` once the backend forwards queries. `Emails` is
+  a collection — bind with `targetType: 'any'` + formatter.
 - **Feature 2 done — Employee detail**: profile header (name, emails, home city from
   `AddressInfo`), trips table, period filter (`DateRangeSelection`) and a "location on
   date" lookup (`DatePicker` → on a trip / at home). Trips load via the v4 `trips` model
@@ -113,7 +117,12 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   Leaflet). Leaflet is loaded from CDN in `index.html` because `sap.ui.vbm`/GeoMap is
   not in the SAPUI5 CDN distribution (404 on 1.136). The map div lives in a
   `sap.ui.core.HTML` control; the controller guards double-init and calls
-  `invalidateSize()` on re-entry of the tab.
+  `invalidateSize()` on re-entry of the tab. Table rows are clickable
+  (`onAirportPress` → `_focusAirport` pans/zooms the map to that marker and opens its
+  popup; markers are kept in `_mMarkers` keyed by ICAO).
+- **Polish**: `EmployeeDetail` trips table and `Overview` show a busy indicator while
+  loading and a `MessageToast` on load failure; `Employees`/`Airports` have empty-state
+  `noDataText`.
 - **Local auth**: mocked users in `package.json` — `coordinator`/`teamlead`/`hr`,
   password `test`. Browsers cache basic auth per session; use an incognito window or
   `http://user@localhost:4004/...` to switch users.

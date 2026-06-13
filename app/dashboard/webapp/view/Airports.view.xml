@@ -46,7 +46,7 @@
                 </columns>
 
                 <items>
-                    <ColumnListItem>
+                    <ColumnListItem type="Active" press=".onAirportPress">
                         <cells>
                             <ObjectIdentifier title="{view>Name}" />
                             <Text text="{view>IataCode}" />

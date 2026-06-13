@@ -4,8 +4,9 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "sap/ui/core/format/NumberFormat",
+    "sap/m/MessageToast",
     "sap/base/Log"
-], function (Controller, JSONModel, Filter, FilterOperator, NumberFormat, Log) {
+], function (Controller, JSONModel, Filter, FilterOperator, NumberFormat, MessageToast, Log) {
     "use strict";
 
     return Controller.extend("primepath.dashboard.controller.Overview", {
@@ -86,6 +87,7 @@ sap.ui.define([
             }).catch(function (oError) {
                 Log.error("Loading overview KPIs failed", oError);
                 oViewModel.setProperty("/busy", false);
+                MessageToast.show(oBundle.getText("kpiLoadError"));
             });
         }
 

@@ -4,8 +4,9 @@ sap.ui.define([
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "sap/ui/core/format/DateFormat",
+    "sap/m/MessageToast",
     "sap/base/Log"
-], function (Controller, JSONModel, Filter, FilterOperator, DateFormat, Log) {
+], function (Controller, JSONModel, Filter, FilterOperator, DateFormat, MessageToast, Log) {
     "use strict";
 
     var MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -15,7 +16,7 @@ sap.ui.define([
         onInit: function () {
             this._oDateFormat = DateFormat.getDateInstance({ style: "medium" });
             this._aAllTrips = [];
-            this.getView().setModel(new JSONModel({ trips: [], locationText: "" }), "detail");
+            this.getView().setModel(new JSONModel({ trips: [], locationText: "", busy: false }), "detail");
             this.getOwnerComponent().getRouter().getRoute("employee")
                 .attachPatternMatched(this.onPatternMatched, this);
         },
@@ -44,7 +45,9 @@ sap.ui.define([
 
         _loadTrips: function (sUserName) {
             var that = this;
+            var oDetail = this.getView().getModel("detail");
             var oTripsModel = this.getOwnerComponent().getModel("trips");
+            oDetail.setProperty("/busy", true);
 
             // De backend leest de username uit de waarde van de eerste filterconditie
             // (CLAUDE.md backend issue 4); het gefilterde veld zelf is daarbij irrelevant.
@@ -66,8 +69,12 @@ sap.ui.define([
                 });
                 that._aAllTrips = aTrips;
                 that._applyDateRange();
+                oDetail.setProperty("/busy", false);
             }).catch(function (oError) {
                 Log.error("Loading trips failed", oError);
+                oDetail.setProperty("/busy", false);
+                var oBundle = that.getOwnerComponent().getModel("i18n").getResourceBundle();
+                MessageToast.show(oBundle.getText("tripsLoadError"));
             });
         },
 

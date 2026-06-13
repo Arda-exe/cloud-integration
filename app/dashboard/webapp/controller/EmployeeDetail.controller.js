@@ -49,12 +49,13 @@ sap.ui.define([
             var oTripsModel = this.getOwnerComponent().getModel("trips");
             oDetail.setProperty("/busy", true);
 
-            // De backend leest de username uit de waarde van de eerste filterconditie
-            // (CLAUDE.md backend issue 4); het gefilterde veld zelf is daarbij irrelevant.
-            // Na de backendfix (query forwarding + persoonsveld in de projectie) wordt
-            // dit een echte server-side filter op dat persoonsveld.
+            // trips-service.js haalt de username uit de filterconditie met een regex
+            // op "personUserName eq '...'" (CLAUDE.md backend issue 4). Het veld MOET
+            // dus personUserName heten, anders matcht de regex niet en geeft de backend
+            // [] terug. Wordt een echte server-side filter zodra de backend PersonTrips
+            // de projectie met personUserName vult.
             var oBinding = oTripsModel.bindList("/PersonTrips", undefined, undefined,
-                [new Filter("Name", FilterOperator.EQ, sUserName)]);
+                [new Filter("personUserName", FilterOperator.EQ, sUserName)]);
 
             oBinding.requestContexts(0, 100).then(function (aContexts) {
                 if (that._sUserName !== sUserName) {
@@ -139,17 +140,6 @@ sap.ui.define([
                 userName: this._sUserName,
                 tripId: oTrip.TripId
             });
-
-            this._loadTrips(sUserName);
-        },
-
-        _loadTrips: function (sUserName) {
-            var oView = this.getView();
-            fetch("/trips/PersonTrips?$filter=personUserName eq '" + sUserName + "'")
-                .then(function (r) { return r.json(); })
-                .then(function (data) {
-                    oView.setModel(new JSONModel({ trips: data.value ?? [] }), "tripData");
-                });
         },
 
         onNavBack: function () {
@@ -171,11 +161,6 @@ sap.ui.define([
             }
             return this._oDateFormat.format(new Date(sStartsAt)) + " – "
                 + this._oDateFormat.format(new Date(sEndsAt));
-        }
-
-        formatDate: function (sDate) {
-            if (!sDate) return "";
-            return new Date(sDate).toLocaleDateString("nl-BE");
         }
     });
 });

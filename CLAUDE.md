@@ -19,13 +19,14 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 
 ## Team split — IMPORTANT for scope
 
-- **Arda (this machine): frontend only.** SAPUI5 app under `app/`, plus frontend-related
-  config. By default, do **not** modify files under `srv/`, `db/`, or `xs-security.json`.
-- **Simon: backend.** CAP services, data model, XSUAA, deployment to BTP.
+- **Frontend team (this machine): frontend only.** SAPUI5 app under `app/`, plus
+  frontend-related config. By default, do **not** modify files under `srv/`, `db/`, or
+  `xs-security.json`.
+- **Backend team:** CAP services, data model, XSUAA, deployment to BTP.
 - Exception: if a frontend feature is blocked by a backend issue, explain the problem and
-  the suggested backend fix in chat (so Arda can pass it to Simon), but do not silently
+  the suggested backend fix in chat (so the frontend team can pass it to the backend team), but do not silently
   change backend code. If explicitly asked to prepare a backend fix, put it in a separate
-  branch or clearly isolated commit so Simon can review it.
+  branch or clearly isolated commit so the backend team can review it.
 
 ## Tech stack
 
@@ -46,12 +47,16 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 
 - `db/schema.cds` — own `TripExtension` entity (namespace `primepath`),
   keyed on `personUserName + tripId`.
-- `srv/` — CAP services + handlers (Simon's area).
+- `srv/` — CAP services + handlers (the backend team's area).
   - `srv/external/TripPin.{cds,xml}` — imported TripPin EDMX metadata.
   - Currently four separate services: people, trips, airlines, airports.
-- `app/dashboard/webapp/` — the freestyle SAPUI5 app (Arda's area). See "Frontend status".
+- `app/dashboard/webapp/` — the freestyle SAPUI5 app (the frontend team's area). See "Frontend status".
 - `xs-security.json` — XSUAA scopes/role templates (TravelCoordinator, TeamLead, HR).
-- No `mta.yaml` yet.
+- `mta.yaml` + `approuter/` — BTP deployment descriptor and approuter (added in `efbb74a`).
+  Topology: CAP `srv` (Node.js) + approuter + XSUAA + Destination Service for TripPin.
+  ⚠️ **Gap:** the approuter has **no html5/static module** for the UI5 app — `xs-app.json`
+  routes everything (incl. the catch-all `^(.*)$`) to `srv-api`, so the frontend is not
+  served on BTP yet. Flagged to the backend team (see "Post-merge audit (13 June 2026)").
 
 ## Commands
 
@@ -91,19 +96,26 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   click-through to `EmployeeDetail.view.xml` (element binding on `/People('user')` via
   route parameter). The list loads once into a JSON `view` model (`bindList` +
   `requestContexts`) and **search filters client-side** (contains on
-  FirstName/LastName/UserName) with a live count in the title — same pattern as Airports,
-  because the backend ignores `$filter` (issue 2); swap back to a server-side
-  `binding.filter()` on `{people>/People}` once the backend forwards queries. `Emails` is
+  FirstName/LastName/UserName) with a live count in the title — same pattern as Airports.
+  This dates from when the backend ignored `$filter` (issue 2); **as of the 13 June
+  re-check the people/airports proxy now forwards `$filter`**, so the client-side filter is
+  **redundant but still works** — it can move to a server-side `binding.filter()` on
+  `{people>/People}` (paging issue 3 still caps results at one page either way). `Emails` is
   a collection — bind with `targetType: 'any'` + formatter.
 - **Feature 2 done — Employee detail**: profile header (name, emails, home city from
   `AddressInfo`), trips table, period filter (`DateRangeSelection`) and a "location on
   date" lookup (`DatePicker` → on a trip / at home). Trips load via the v4 `trips` model
-  (`bindList` + `requestContexts`) with a single eq-filter carrying the username — the
-  current backend reads the person from the first filter value (issue 4). Sorting,
-  period filtering and the location lookup are **client-side** over the loaded set,
-  because the backend ignores `$filter`/`$orderby`; swap to server-side binding filters
-  once the backend forwards queries. NB: the profile header shows the wrong person until
-  backend issue 2 is fixed (keyed reads ignore the key).
+  (`bindList` + `requestContexts`) with a single eq-filter on **`personUserName`** carrying
+  the username — `trips-service.js` extracts it with a regex on `personUserName eq '…'`
+  (issue 4), so the filter field name must be exactly that. Sorting, period filtering and
+  the location lookup are **client-side** over the loaded set. The profile header now shows
+  the **correct** person: the people proxy forwards keyed reads (`People('user')`) since the
+  13 June backend re-check, so the old "shows Russell for everyone" bug is gone.
+  ⚠️ **Post-merge repair (13 June):** the PR #4 merge had left this page broken — the
+  controller had a duplicate `_loadTrips`, a leftover `formatDate`, and a missing comma
+  (JS syntax error → the whole module failed to parse), and the view had an orphaned
+  `<List>` with a duplicate `</content>`. Both were cleaned up; the trips filter was
+  changed from the dummy field `Name` to `personUserName` so the backend regex matches.
 - **Feature 3 done (partially) — Trip detail**: reached by clicking a trip row on the
   employee detail (route `employees/{userName}/trips/{tripId}` — tripId is only unique
   within a person, so both live in the path; `TripDetail.view.xml`). Shows trip facts
@@ -145,7 +157,7 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 
 1. ~~Employees tab: searchable list, click-through to employee detail page.~~ ✅ done
 2. ~~Employee detail: profile + chronological trips with time filtering; show the person's
-   location on a chosen date.~~ ✅ done (header shows wrong person until backend issue 2 is fixed)
+   location on a chosen date.~~ ✅ done (header now correct; merge damage repaired 13 June)
 3. ~~Trip detail page (reached from an employee): plus the extension fields (approval
    status, company, team, notes).~~ ✅ done (partially) — facts + extension fields shown;
    flights/airports/involved people blocked until `PlanItems` is reachable (issue 9).
@@ -164,10 +176,19 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 - A Trips tab as landing page.
 - Mobile-first design (desktop primary; stay responsive).
 
-## Known backend issues (context only — do NOT fix unprompted; flag to Simon)
+## Known backend issues (context only — do NOT fix unprompted)
 
-Verified on 12 June against the running service (all four `srv/*.js` impls share the same
-raw-`fetch()` pattern):
+First verified 12 June; **re-checked against HEAD on 13 June 2026** after the PR #4 merge.
+Statuses changed — current verdict per issue (commit refs in parentheses):
+
+- #1 **still broken** · #2 **partially fixed** (people/airports/airlines proxy forwards
+  query options + keyed reads; `trips-service.js` was NOT given the proxy) · #3 **still
+  broken** · #4 **degraded** (structured parse from `fb1a563` replaced by a brittle regex
+  in `a7e5f5b`) · #5 **regressed** (handlers existed at `fb1a563`/`efbb74a`, dropped when
+  `a7e5f5b` rewrote the file) · #6 **fixed** (`rejectTrip` rename) · #7 still open · #8
+  still a recommendation · #9 **still broken** · #10 **still applies**.
+
+Original descriptions below (changed ones carry a **[13 June: …]** status tag):
 
 1. **All four services use raw `fetch()`** to the TripPin URL instead of
    `cds.connect.to('TripPin')` + `srv.run(req.query)`. This bypasses the Destination
@@ -178,18 +199,30 @@ raw-`fetch()` pattern):
    'Russell'` and `?$top=3` both return all 8 records, and `People('scottketchum')`
    returns **Russell** (CAP picks the first row of the returned array). Concrete impact:
    the Employees search never shrinks, and the employee detail header shows Russell for
-   every person. Forwarding `req.query` (fix 1) solves this.
+   every person. Forwarding `req.query` (fix 1) solves this. **[13 June: PARTIALLY FIXED —
+   `people/airports/airlines-service.js` now forward the raw request path+querystring to
+   TripPin via a `proxy()`, so `$filter`/`$select`/`$orderby` and keyed reads work for
+   those three. `trips-service.js` was NOT given the proxy (regex-based, see #4). Paging
+   (#3) is still unfixed, so result sets are still capped at one page.]**
 3. **Server-driven paging is not followed**: TripPin pages People at 8 per page
    (`@odata.nextLink`); the raw fetch returns only page 1, so the app shows 8 of ±20
    employees.
 4. `trips-service.js` parses the person filter via `req.query.SELECT?.where?.[2]?.val`
    — brittle (breaks when the UI sends different/extra filters) and silently falls back
-   to `'russellwhyte'`. Relevant for the employee detail page (feature 2).
+   to `'russellwhyte'`. Relevant for the employee detail page (feature 2). **[13 June:
+   DEGRADED — `a7e5f5b` replaced this with a regex `/personUserName eq '([^']+)'/` and
+   now returns `[]` (no russellwhyte fallback) when it doesn't match. The frontend was
+   updated to filter on the `personUserName` field so the regex matches. Still brittle,
+   and no `encodeURIComponent` on the value before interpolating it into the fetch URL.]**
 5. **`approve()` / `reject()` are declared in `trips-service.cds` but have no handler**
-   in `trips-service.js` — calling them fails. Needed for frontend feature 8.
+   in `trips-service.js` — calling them fails. Needed for frontend feature 8. **[13 June:
+   REGRESSED and still broken — the actions are now named `approve()`/`rejectTrip()` in
+   the CDS but still have **zero handlers** in `trips-service.js`. Handlers existed at
+   `fb1a563`/`efbb74a` but were dropped when `a7e5f5b` rewrote the file. Calling → 501.]**
 6. `cds watch` warns that the custom action **`reject()`** shadows the equally named
    method of the `ApplicationService` base class — CAP cannot generate the typed
-   convenience method. Suggest renaming the action (e.g. `rejectTrip`).
+   convenience method. Suggest renaming the action (e.g. `rejectTrip`). **[13 June: FIXED
+   — the action is renamed `rejectTrip` in `trips-service.cds`.]**
 7. The **projection/mashup pattern** from the analysis (TripPin `Trip` joined with
    `TripExtension` so the UI sees one entity) is not implemented yet — extension fields
    are a separate entity for now.
@@ -210,12 +243,49 @@ raw-`fetch()` pattern):
    declares an Integer enum. Works today, but fragile with strict OData V4 clients —
    `srv.run(req.query)` (fix 1) makes CAP do the serialization properly.
 
+## Post-merge audit (13 June 2026)
+
+Triggered by the PR #4 merge (`063143e`) and the "Merge main into frontend" (`45eaf4e`),
+which naively kept **both** the frontend team's and the backend team's versions of the Employee Detail page side by
+side instead of resolving them. Full front+back audit; verified with `node --check` and git
+forensics. (No leftover `<<<<<<<` conflict markers; `main..frontend` is empty, so nothing
+important is stranded on the dangling `frontend` branch.)
+
+**Frontend repairs — DONE (the frontend team's area):**
+- `EmployeeDetail.controller.js`: removed the duplicate raw-`fetch` `_loadTrips`, the unused
+  `formatDate`, and the stray `this._loadTrips(sUserName)` call in `onTripPress` — this also
+  fixed the missing-comma JS **syntax error** that made the whole module fail to parse (so
+  the page, plus the trip click-through, was fully dead). Changed the trips filter field
+  `Name` → `personUserName` so the backend regex matches. `node --check` passes.
+- `EmployeeDetail.view.xml`: removed the orphaned `<List>` (bound to a dead `tripData`
+  model) and the duplicate `</content>` tag that made the XML invalid.
+
+**Flag to the backend team — backend/deploy regressions (NOT edited, per the team split):**
+- **approve/rejectTrip handlers dropped** (issue 5) — restore from `fb1a563`/`efbb74a`;
+  lost when frontend commit `a7e5f5b` rewrote `trips-service.js` from scratch.
+- **trips filter parser is a brittle regex** (issue 4) — prefer the structured
+  `req.query.SELECT.where` parse; accept the value regardless of field; `encodeURIComponent`
+  it. The FE now sends `personUserName eq '…'`, so the current regex *does* match today.
+- **`PersonTrips.personUserName` is projected as `''`** (always empty) — populate it from
+  the requested user so a real server-side filter / column display works.
+- **raw `fetch()` instead of `cds.connect.to('TripPin')`** (issue 1) — bypasses the
+  Destination Service; BTP risk; also keeps the metadata leak (issue 10).
+- **paging not followed** (issue 3) — `proxy()` returns page 1 only (~8 of ~20 employees).
+- **`PlanItems` unreachable** (issue 9) — still blocks flights / top-airlines / top-routes.
+- **BTP deploy gap (HIGH):** the approuter has no html5/static module for the UI5 app, so
+  the frontend is not served on BTP. The backend team is reportedly already working on it.
+- Cleanup: `trips-service.js` has leftover `console.log` debug lines.
+
+**Merge hygiene:** backend files under `srv/` were rewritten on the *frontend* branch
+(`a7e5f5b`), which is how the backend team's fixes got lost. Keep backend work on backend branches and
+the frontend out of `srv/` per the team split.
+
 ## Working style
 
 - Work **one feature at a time**; run it, verify in the browser, then move on.
 - Prefer standard SAPUI5/Fiori patterns (sap.m, sap.f, OData V4 model, routing via
   manifest.json) over custom hacks — grading partly tests understanding of the SAP stack.
-- Keep explanations short; Arda is new to SAPUI5, so when introducing a new concept
+- Keep explanations short; the frontend team is new to SAPUI5, so when introducing a new concept
   (e.g. bindings, manifest routing), add a 2–3 line explanation, not an essay.
 - When unsure about a TripPin field or relation, inspect `srv/external/TripPin.cds` or the
   live service at port 4004.

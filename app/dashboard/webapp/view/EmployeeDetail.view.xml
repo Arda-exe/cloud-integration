@@ -85,18 +85,6 @@
 
             </Table>
         </content>
-
-            <List
-                id="tripsList"
-                items="{tripData>/trips}"
-                noDataText="Geen trips gevonden">
-                <StandardListItem
-                    title="{tripData>Name}"
-                    description="{tripData>Description}"
-                    info="{path: 'tripData>StartsAt', formatter: '.formatDate'} - {path: 'tripData>EndsAt', formatter: '.formatDate'}"
-                    infoState="None" />
-            </List>
-        </content>
     </Page>
 
 </mvc:View>

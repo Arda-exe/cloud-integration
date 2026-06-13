@@ -82,8 +82,8 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   `height="100vh"` — percentage heights break because UI5 renders unstyled wrapper divs).
   Manifest routing: `""`→Overview, `employees`, `employees/{userName}`→EmployeeDetail,
   `airports`; route names double as tab keys (detail routes map to their list tab in
-  `App.controller.js`). Overview & Airports are still `IllustratedMessage` placeholders
-  (use a fixed `illustrationSize` — `Auto` flickers in auto-height containers).
+  `App.controller.js`). NB: `IllustratedMessage` needs a fixed `illustrationSize` —
+  `Auto` flickers in auto-height containers.
 - **Models**: four named OData V4 models in manifest — `people`, `trips`, `airlines`,
   `airports` (autoExpandSelect, operationMode Server, earlyRequests). Bind with prefix:
   `{people>/People}`. No anonymous default model.
@@ -100,6 +100,20 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   because the backend ignores `$filter`/`$orderby`; swap to server-side binding filters
   once the backend forwards queries. NB: the profile header shows the wrong person until
   backend issue 2 is fixed (keyed reads ignore the key).
+- **Feature 5 done (partially) — Overview**: KPI tiles (`GenericTile`/`NumericContent`:
+  employees, trips, total budget, airports, airlines) + "Top travellers" `sap.f.Card`.
+  Counts are computed client-side over the loaded sets (so they reflect TripPin's first
+  page until backend issue 3 is fixed); trips are aggregated with one `PersonTrips`
+  request per person. **Top airlines / top routes are still missing**: they need flight
+  data (`PlanItems`), and navigation paths like `PersonTrips(...)/PlanItems` return 501
+  (backend issue 9).
+- **Feature 6 done — Airports**: table (name, IATA, ICAO, city, country) with
+  client-side search + **Leaflet/OpenStreetMap map** with a marker per airport
+  (coordinates from `Location.Loc`, GeoJSON `[lon, lat]` — flip to `[lat, lon]` for
+  Leaflet). Leaflet is loaded from CDN in `index.html` because `sap.ui.vbm`/GeoMap is
+  not in the SAPUI5 CDN distribution (404 on 1.136). The map div lives in a
+  `sap.ui.core.HTML` control; the controller guards double-init and calls
+  `invalidateSize()` on re-entry of the tab.
 - **Local auth**: mocked users in `package.json` — `coordinator`/`teamlead`/`hr`,
   password `test`. Browsers cache basic auth per session; use an incognito window or
   `http://user@localhost:4004/...` to switch users.
@@ -115,8 +129,9 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 3. Trip detail page (reached from an employee): flights, airports, involved people,
    plus the extension fields (approval status, company, team, notes).
 4. Cross-navigation: employee → trip → airport/airline → back to people.
-5. Overview tab: KPI cards (totals, top airlines, top routes).
-6. Airports tab: list + map visualization.
+5. ~~Overview tab: KPI cards (totals).~~ ✅ done — except **top airlines/top routes**:
+   blocked until flight data (`PlanItems`) is reachable (backend issue 9).
+6. ~~Airports tab: list + map visualization.~~ ✅ done (Leaflet/OSM)
 7. Global search across employees, airports, airlines.
 8. Coordinator-only: add trip, approve/reject (UI side of the actions).
 
@@ -160,7 +175,13 @@ raw-`fetch()` pattern):
    `DashboardService` with associations between entities. Four services mean four OData
    models in the UI5 app and no `$expand` across entities, which complicates
    cross-navigation — the core of this app.
-9. Raw passthrough of TripPin JSON leaks foreign metadata into our responses:
+9. **Navigation paths return 501**: `People('x')/Trips` and `PersonTrips(...)/PlanItems`
+   fail with "cannot be served generically" — the on-READ handlers only cover the entity
+   sets themselves, and the auto-exposed composition targets have `@cds.persistence.skip`.
+   This blocks flight data (`PlanItems` → `Flight` → airline/from/to), which the frontend
+   needs for the trip detail page (feature 3) and the top-airlines/top-routes KPIs
+   (feature 5). Query forwarding (fix 1) plus exposing `PlanItems` solves this.
+10. Raw passthrough of TripPin JSON leaks foreign metadata into our responses:
    absolute `@odata.id`/`@odata.editLink` pointing at services.odata.org, `Concurrency`
    (Int64) serialized as a JSON number even when the client requests
    `IEEE754Compatible=true`, and `Gender` returned as a string while the CDS model

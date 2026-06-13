@@ -1,16 +1,64 @@
 <mvc:View
+    controllerName="primepath.dashboard.controller.Airports"
     displayBlock="true"
     xmlns:mvc="sap.ui.core.mvc"
+    xmlns:core="sap.ui.core"
     xmlns="sap.m">
 
-    <Page showHeader="false" enableScrolling="false">
-        <FlexBox height="100%" justifyContent="Center" alignItems="Center">
-            <IllustratedMessage
-                illustrationSize="Dialog"
-                illustrationType="sapIllus-Tent"
-                title="{i18n>tabAirports}"
-                description="{i18n>placeholderText}" />
-        </FlexBox>
+    <Page showHeader="false" backgroundDesign="List">
+        <content>
+            <core:HTML content='&lt;div id="airportsMap" style="height: 45vh; width: 100%;"&gt;&lt;/div&gt;' />
+
+            <Table
+                id="airportsTable"
+                items="{view>/airports}"
+                noDataText="{i18n>airportsNoData}"
+                sticky="ColumnHeaders">
+
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title text="{i18n>airportsTableTitle} ({view>/count})" />
+                        <ToolbarSpacer />
+                        <SearchField
+                            id="airportsSearch"
+                            width="20rem"
+                            placeholder="{i18n>airportsSearchPlaceholder}"
+                            liveChange=".onSearch" />
+                    </OverflowToolbar>
+                </headerToolbar>
+
+                <columns>
+                    <Column>
+                        <Text text="{i18n>colAirport}" />
+                    </Column>
+                    <Column width="6rem" minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colIata}" />
+                    </Column>
+                    <Column width="6rem" minScreenWidth="Desktop" demandPopin="true">
+                        <Text text="{i18n>colIcao}" />
+                    </Column>
+                    <Column>
+                        <Text text="{i18n>colCity}" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colCountry}" />
+                    </Column>
+                </columns>
+
+                <items>
+                    <ColumnListItem>
+                        <cells>
+                            <ObjectIdentifier title="{view>Name}" />
+                            <Text text="{view>IataCode}" />
+                            <Text text="{view>IcaoCode}" />
+                            <Text text="{view>Location/City/Name}" />
+                            <Text text="{view>Location/City/CountryRegion}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+
+            </Table>
+        </content>
     </Page>
 
 </mvc:View>

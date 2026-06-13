@@ -1,0 +1,31 @@
+{
+    "welcomeFile": "/index.html",
+    "authenticationMethod": "route",
+    "routes": [
+        {
+            "source": "^/people/(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^/airlines/(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^/airports/(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^/trips/(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        }
+    ]
+}

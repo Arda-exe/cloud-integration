@@ -4,7 +4,10 @@ using { primepath } from '../db/schema';
 @requires: 'authenticated-user'
 service TripsService @(path: '/trips') {
 
-    @readonly entity PersonTrips as projection on external.Trip;
+    @readonly entity PersonTrips as projection on external.Trip {
+        *,
+        '' as personUserName : String
+    };
 
     @restrict: [
         { grant: ['READ'],                                to: 'TeamLead' },

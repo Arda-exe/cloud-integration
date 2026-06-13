@@ -5,32 +5,24 @@ const BASE = cds.env.requires?.TripPin?.credentials?.url
 
 module.exports = cds.service.impl(async function () {
 
-    this.on('READ', 'PersonTrips', async (req) => {
-        const rawQuery = req._.req?.url?.split('?')[1] ?? ''
-        const userName = new URLSearchParams(rawQuery).get('personUserName')
-            ?? req._.req?.url?.match(/People\('([^']+)'\)/)?.[1]
+this.on('READ', 'PersonTrips', async (req) => {
+    const filterParam = req._.req?.query?.['$filter'] 
+        ?? req.query?.SELECT?.where?.toString() 
+        ?? ''
+    
+    console.log('FILTER:', filterParam)
+    
 
-        if (!userName) return []
-
-        const query = rawQuery.replace(/personUserName[^&]*/g, '').replace(/^&|&$/g, '')
-        const url = query
-            ? `${BASE}/People('${userName}')/Trips?${query}`
-            : `${BASE}/People('${userName}')/Trips`
-
-        const res = await fetch(url)
-        const json = await res.json()
-        return json.value ?? []
-    })
-
-    this.on('approve', 'TripExtensions', async (req) => {
-        const { tripId, personUserName } = req.params[0]
-        await UPDATE(req.subject).set({ approvalStatus: 'approved' })
-        return { message: `Trip ${tripId} goedgekeurd` }
-    })
-
-    this.on('rejectTrip', 'TripExtensions', async (req) => {
-        const { tripId, personUserName } = req.params[0]
-        await UPDATE(req.subject).set({ approvalStatus: 'rejected' })
-        return { message: `Trip ${tripId} afgekeurd` }
-    })
+    const match = filterParam.match(/personUserName eq '([^']+)'/)
+    const userName = match?.[1]
+    
+    console.log('USERNAME:', userName)
+    
+    if (!userName) return []
+    
+    const res = await fetch(`${BASE}/People('${userName}')/Trips`)
+    const json = await res.json()
+    console.log('TRIPS COUNT:', json.value?.length)
+    return json.value ?? []
+})
 })

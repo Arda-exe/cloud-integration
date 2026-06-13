@@ -21,10 +21,21 @@
                 </attributes>
             </ObjectHeader>
 
-            <MessageStrip
-                class="sapUiSmallMargin"
-                showIcon="true"
-                text="{i18n>employeeDetailComingSoon}" />
+            <Title
+                text="Trips"
+                class="sapUiMediumMarginBegin sapUiSmallMarginTop" />
+
+            <List
+                id="tripsList"
+                items="{tripData>/trips}"
+                noDataText="Geen trips gevonden">
+                <StandardListItem
+                    title="{tripData>Name}"
+                    description="{tripData>Description}"
+                    info="{path: 'tripData>StartsAt', formatter: '.formatDate'} - {path: 'tripData>EndsAt', formatter: '.formatDate'}"
+                    infoState="None" />
+            </List>
+
         </content>
 
     </Page>

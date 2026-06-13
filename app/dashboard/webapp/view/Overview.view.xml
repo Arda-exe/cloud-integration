@@ -1,0 +1,16 @@
+<mvc:View
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+
+    <Page showHeader="false" enableScrolling="false">
+        <FlexBox height="100%" justifyContent="Center" alignItems="Center">
+            <IllustratedMessage
+                illustrationSize="Dialog"
+                illustrationType="sapIllus-Tent"
+                title="{i18n>tabOverview}"
+                description="{i18n>placeholderText}" />
+        </FlexBox>
+    </Page>
+
+</mvc:View>

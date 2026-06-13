@@ -1,0 +1,32 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.EmployeeDetail"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+
+    <Page
+        id="employeePage"
+        title="{i18n>employeeDetailTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack">
+
+        <content>
+            <ObjectHeader
+                title="{people>FirstName} {people>LastName}"
+                intro="{people>UserName}">
+                <attributes>
+                    <ObjectAttribute
+                        title="{i18n>lblEmail}"
+                        text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" />
+                </attributes>
+            </ObjectHeader>
+
+            <MessageStrip
+                class="sapUiSmallMargin"
+                showIcon="true"
+                text="{i18n>employeeDetailComingSoon}" />
+        </content>
+
+    </Page>
+
+</mvc:View>

@@ -91,15 +91,27 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   click-through to `EmployeeDetail.view.xml` (element binding on `/People('user')` via
   route parameter). Search sends correct `$filter` but the backend ignores it (see
   backend issues). `Emails` is a collection — bind with `targetType: 'any'` + formatter.
+- **Feature 2 done — Employee detail**: profile header (name, emails, home city from
+  `AddressInfo`), trips table, period filter (`DateRangeSelection`) and a "location on
+  date" lookup (`DatePicker` → on a trip / at home). Trips load via the v4 `trips` model
+  (`bindList` + `requestContexts`) with a single eq-filter carrying the username — the
+  current backend reads the person from the first filter value (issue 4). Sorting,
+  period filtering and the location lookup are **client-side** over the loaded set,
+  because the backend ignores `$filter`/`$orderby`; swap to server-side binding filters
+  once the backend forwards queries. NB: the profile header shows the wrong person until
+  backend issue 2 is fixed (keyed reads ignore the key).
 - **Local auth**: mocked users in `package.json` — `coordinator`/`teamlead`/`hr`,
   password `test`. Browsers cache basic auth per session; use an incognito window or
   `http://user@localhost:4004/...` to switch users.
+- **Verification tooling**: `playwright-core` scripts (headless Chrome with
+  `httpCredentials`) were used to verify features end-to-end; ask Claude to re-run or
+  extend them when adding features.
 
 ## In scope (frontend feature list, build one at a time)
 
 1. ~~Employees tab: searchable list, click-through to employee detail page.~~ ✅ done
-2. Employee detail: profile + chronological trips with time filtering; show the person's
-   location on a chosen date.
+2. ~~Employee detail: profile + chronological trips with time filtering; show the person's
+   location on a chosen date.~~ ✅ done (header shows wrong person until backend issue 2 is fixed)
 3. Trip detail page (reached from an employee): flights, airports, involved people,
    plus the extension fields (approval status, company, team, notes).
 4. Cross-navigation: employee → trip → airport/airline → back to people.
@@ -124,10 +136,12 @@ raw-`fetch()` pattern):
    `cds.connect.to('TripPin')` + `srv.run(req.query)`. This bypasses the Destination
    Service and **will break on BTP**.
 2. **All OData query options are ignored** (`$filter`, `$top`, `$skip`, `$select`,
-   `$orderby`, `$count`): the on-READ handlers always return the full first page from
-   TripPin. Verified: `People?$filter=FirstName eq 'Russell'` and `?$top=3` both return
-   all 8 records. Concrete impact: the Employees search field sends a correct `$filter`
-   but results never shrink. Forwarding `req.query` (fix 1) solves this.
+   `$orderby`, `$count`) **and keyed reads ignore the key**: the on-READ handlers always
+   return the full first page from TripPin. Verified: `People?$filter=FirstName eq
+   'Russell'` and `?$top=3` both return all 8 records, and `People('scottketchum')`
+   returns **Russell** (CAP picks the first row of the returned array). Concrete impact:
+   the Employees search never shrinks, and the employee detail header shows Russell for
+   every person. Forwarding `req.query` (fix 1) solves this.
 3. **Server-driven paging is not followed**: TripPin pages People at 8 per page
    (`@odata.nextLink`); the raw fetch returns only page 1, so the app shows 8 of ±20
    employees.

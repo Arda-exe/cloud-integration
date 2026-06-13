@@ -82,29 +82,78 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   `height="100vh"` — percentage heights break because UI5 renders unstyled wrapper divs).
   Manifest routing: `""`→Overview, `employees`, `employees/{userName}`→EmployeeDetail,
   `airports`; route names double as tab keys (detail routes map to their list tab in
-  `App.controller.js`). Overview & Airports are still `IllustratedMessage` placeholders
-  (use a fixed `illustrationSize` — `Auto` flickers in auto-height containers).
+  `App.controller.js`). NB: `IllustratedMessage` needs a fixed `illustrationSize` —
+  `Auto` flickers in auto-height containers.
 - **Models**: four named OData V4 models in manifest — `people`, `trips`, `airlines`,
   `airports` (autoExpandSelect, operationMode Server, earlyRequests). Bind with prefix:
   `{people>/People}`. No anonymous default model.
 - **Feature 1 done — Employees**: searchable table (`Employees.view.xml`) with
   click-through to `EmployeeDetail.view.xml` (element binding on `/People('user')` via
-  route parameter). Search sends correct `$filter` but the backend ignores it (see
-  backend issues). `Emails` is a collection — bind with `targetType: 'any'` + formatter.
+  route parameter). The list loads once into a JSON `view` model (`bindList` +
+  `requestContexts`) and **search filters client-side** (contains on
+  FirstName/LastName/UserName) with a live count in the title — same pattern as Airports,
+  because the backend ignores `$filter` (issue 2); swap back to a server-side
+  `binding.filter()` on `{people>/People}` once the backend forwards queries. `Emails` is
+  a collection — bind with `targetType: 'any'` + formatter.
+- **Feature 2 done — Employee detail**: profile header (name, emails, home city from
+  `AddressInfo`), trips table, period filter (`DateRangeSelection`) and a "location on
+  date" lookup (`DatePicker` → on a trip / at home). Trips load via the v4 `trips` model
+  (`bindList` + `requestContexts`) with a single eq-filter carrying the username — the
+  current backend reads the person from the first filter value (issue 4). Sorting,
+  period filtering and the location lookup are **client-side** over the loaded set,
+  because the backend ignores `$filter`/`$orderby`; swap to server-side binding filters
+  once the backend forwards queries. NB: the profile header shows the wrong person until
+  backend issue 2 is fixed (keyed reads ignore the key).
+- **Feature 3 done (partially) — Trip detail**: reached by clicking a trip row on the
+  employee detail (route `employees/{userName}/trips/{tripId}` — tripId is only unique
+  within a person, so both live in the path; `TripDetail.view.xml`). Shows trip facts
+  (name, period, budget, description, tags) from `PersonTrips` — the trip is matched
+  **client-side by `TripId`** because keyed trip-reads return the wrong row (issue 2) —
+  plus the **extension fields** (approval status as a coloured `ObjectStatus`, company,
+  team, notes) read from `/trips/TripExtensions` via a composite-key filter
+  (`personUserName`+`tripId`) with an explicit `$select` (the table is empty today, so it
+  shows "Not submitted" / —). **Flights are a "coming soon" `MessageStrip`**: `PlanItems`
+  is unreachable (issue 9). This also delivers the employee→trip leg of **feature 4
+  (cross-navigation)**; trip→airport/airline needs flight data.
+- **Feature 5 done (partially) — Overview**: KPI tiles (`GenericTile`/`NumericContent`:
+  employees, trips, total budget, airports, airlines) + "Top travellers" `sap.f.Card`.
+  Counts are computed client-side over the loaded sets (so they reflect TripPin's first
+  page until backend issue 3 is fixed); trips are aggregated with one `PersonTrips`
+  request per person. **Top airlines / top routes are still missing**: they need flight
+  data (`PlanItems`), and navigation paths like `PersonTrips(...)/PlanItems` return 501
+  (backend issue 9).
+- **Feature 6 done — Airports**: table (name, IATA, ICAO, city, country) with
+  client-side search + **Leaflet/OpenStreetMap map** with a marker per airport
+  (coordinates from `Location.Loc`, GeoJSON `[lon, lat]` — flip to `[lat, lon]` for
+  Leaflet). Leaflet is loaded from CDN in `index.html` because `sap.ui.vbm`/GeoMap is
+  not in the SAPUI5 CDN distribution (404 on 1.136). The map div lives in a
+  `sap.ui.core.HTML` control; the controller guards double-init and calls
+  `invalidateSize()` on re-entry of the tab. Table rows are clickable
+  (`onAirportPress` → `_focusAirport` pans/zooms the map to that marker and opens its
+  popup; markers are kept in `_mMarkers` keyed by ICAO).
+- **Polish**: `EmployeeDetail` trips table and `Overview` show a busy indicator while
+  loading and a `MessageToast` on load failure; `Employees`/`Airports` have empty-state
+  `noDataText`.
 - **Local auth**: mocked users in `package.json` — `coordinator`/`teamlead`/`hr`,
   password `test`. Browsers cache basic auth per session; use an incognito window or
   `http://user@localhost:4004/...` to switch users.
+- **Verification tooling**: `playwright-core` scripts (headless Chrome with
+  `httpCredentials`) were used to verify features end-to-end; ask Claude to re-run or
+  extend them when adding features.
 
 ## In scope (frontend feature list, build one at a time)
 
 1. ~~Employees tab: searchable list, click-through to employee detail page.~~ ✅ done
-2. Employee detail: profile + chronological trips with time filtering; show the person's
-   location on a chosen date.
-3. Trip detail page (reached from an employee): flights, airports, involved people,
-   plus the extension fields (approval status, company, team, notes).
-4. Cross-navigation: employee → trip → airport/airline → back to people.
-5. Overview tab: KPI cards (totals, top airlines, top routes).
-6. Airports tab: list + map visualization.
+2. ~~Employee detail: profile + chronological trips with time filtering; show the person's
+   location on a chosen date.~~ ✅ done (header shows wrong person until backend issue 2 is fixed)
+3. ~~Trip detail page (reached from an employee): plus the extension fields (approval
+   status, company, team, notes).~~ ✅ done (partially) — facts + extension fields shown;
+   flights/airports/involved people blocked until `PlanItems` is reachable (issue 9).
+4. Cross-navigation: employee → trip → airport/airline → back to people. ⏳ partially —
+   employee → trip done; trip → airport/airline needs flight data (issue 9).
+5. ~~Overview tab: KPI cards (totals).~~ ✅ done — except **top airlines/top routes**:
+   blocked until flight data (`PlanItems`) is reachable (backend issue 9).
+6. ~~Airports tab: list + map visualization.~~ ✅ done (Leaflet/OSM)
 7. Global search across employees, airports, airlines.
 8. Coordinator-only: add trip, approve/reject (UI side of the actions).
 
@@ -124,10 +173,12 @@ raw-`fetch()` pattern):
    `cds.connect.to('TripPin')` + `srv.run(req.query)`. This bypasses the Destination
    Service and **will break on BTP**.
 2. **All OData query options are ignored** (`$filter`, `$top`, `$skip`, `$select`,
-   `$orderby`, `$count`): the on-READ handlers always return the full first page from
-   TripPin. Verified: `People?$filter=FirstName eq 'Russell'` and `?$top=3` both return
-   all 8 records. Concrete impact: the Employees search field sends a correct `$filter`
-   but results never shrink. Forwarding `req.query` (fix 1) solves this.
+   `$orderby`, `$count`) **and keyed reads ignore the key**: the on-READ handlers always
+   return the full first page from TripPin. Verified: `People?$filter=FirstName eq
+   'Russell'` and `?$top=3` both return all 8 records, and `People('scottketchum')`
+   returns **Russell** (CAP picks the first row of the returned array). Concrete impact:
+   the Employees search never shrinks, and the employee detail header shows Russell for
+   every person. Forwarding `req.query` (fix 1) solves this.
 3. **Server-driven paging is not followed**: TripPin pages People at 8 per page
    (`@odata.nextLink`); the raw fetch returns only page 1, so the app shows 8 of ±20
    employees.
@@ -146,7 +197,13 @@ raw-`fetch()` pattern):
    `DashboardService` with associations between entities. Four services mean four OData
    models in the UI5 app and no `$expand` across entities, which complicates
    cross-navigation — the core of this app.
-9. Raw passthrough of TripPin JSON leaks foreign metadata into our responses:
+9. **Navigation paths return 501**: `People('x')/Trips` and `PersonTrips(...)/PlanItems`
+   fail with "cannot be served generically" — the on-READ handlers only cover the entity
+   sets themselves, and the auto-exposed composition targets have `@cds.persistence.skip`.
+   This blocks flight data (`PlanItems` → `Flight` → airline/from/to), which the frontend
+   needs for the trip detail page (feature 3) and the top-airlines/top-routes KPIs
+   (feature 5). Query forwarding (fix 1) plus exposing `PlanItems` solves this.
+10. Raw passthrough of TripPin JSON leaks foreign metadata into our responses:
    absolute `@odata.id`/`@odata.editLink` pointing at services.odata.org, `Concurrency`
    (Int64) serialized as a JSON number even when the client requests
    `IEEE754Compatible=true`, and `Gender` returned as a string while the CDS model

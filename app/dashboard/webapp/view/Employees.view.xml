@@ -8,14 +8,15 @@
         <content>
             <Table
                 id="employeesTable"
-                items="{people>/People}"
+                items="{view>/people}"
                 growing="true"
                 growingThreshold="20"
+                noDataText="{i18n>employeesNoData}"
                 sticky="ColumnHeaders">
 
                 <headerToolbar>
                     <OverflowToolbar>
-                        <Title text="{i18n>employeesTableTitle}" />
+                        <Title text="{i18n>employeesTableTitle} ({view>/count})" />
                         <ToolbarSpacer />
                         <SearchField
                             id="searchField"
@@ -40,9 +41,9 @@
                 <items>
                     <ColumnListItem type="Navigation" press=".onEmployeePress">
                         <cells>
-                            <ObjectIdentifier title="{people>FirstName} {people>LastName}" />
-                            <Text text="{people>UserName}" />
-                            <Text text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" />
+                            <ObjectIdentifier title="{view>FirstName} {view>LastName}" />
+                            <Text text="{view>UserName}" />
+                            <Text text="{path: 'view>Emails', targetType: 'any', formatter: '.formatEmails'}" />
                         </cells>
                     </ColumnListItem>
                 </items>

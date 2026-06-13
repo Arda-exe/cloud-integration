@@ -18,10 +18,73 @@
                     <ObjectAttribute
                         title="Email"
                         text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" />
+                    <ObjectAttribute
+                        title="{i18n>lblCity}"
+                        text="{path: 'people>AddressInfo', targetType: 'any', formatter: '.formatCity'}" />
                 </attributes>
             </ObjectHeader>
 
-            <Title text="Trips" class="sapUiMediumMarginBegin sapUiSmallMarginTop" />
+            <Panel headerText="{i18n>locationTitle}" class="sapUiSmallMargin">
+                <content>
+                    <HBox alignItems="Center" wrap="Wrap" class="sapUiTinyMargin">
+                        <DatePicker
+                            id="locationDate"
+                            width="12rem"
+                            placeholder="{i18n>locationDatePlaceholder}"
+                            change=".onLocationDateChange"
+                            class="sapUiSmallMarginEnd" />
+                        <Text text="{detail>/locationText}" />
+                    </HBox>
+                </content>
+            </Panel>
+
+            <Table
+                id="tripsTable"
+                items="{detail>/trips}"
+                busy="{detail>/busy}"
+                busyIndicatorDelay="200"
+                noDataText="{i18n>tripsNoData}">
+
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title text="{i18n>tripsTitle}" />
+                        <ToolbarSpacer />
+                        <DateRangeSelection
+                            id="tripsRange"
+                            width="18rem"
+                            placeholder="{i18n>tripsRangePlaceholder}"
+                            change=".onDateRangeChange" />
+                    </OverflowToolbar>
+                </headerToolbar>
+
+                <columns>
+                    <Column>
+                        <Text text="{i18n>colTrip}" />
+                    </Column>
+                    <Column>
+                        <Text text="{i18n>colPeriod}" />
+                    </Column>
+                    <Column hAlign="End" minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colBudget}" />
+                    </Column>
+                    <Column minScreenWidth="Desktop" demandPopin="true">
+                        <Text text="{i18n>colDescription}" />
+                    </Column>
+                </columns>
+
+                <items>
+                    <ColumnListItem type="Navigation" press=".onTripPress">
+                        <cells>
+                            <ObjectIdentifier title="{detail>Name}" />
+                            <Text text="{parts: ['detail>StartsAt', 'detail>EndsAt'], formatter: '.formatPeriod'}" />
+                            <ObjectNumber number="{detail>Budget}" unit="USD" />
+                            <Text text="{detail>Description}" maxLines="2" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+
+            </Table>
+        </content>
 
             <List
                 id="tripsList"

@@ -73,7 +73,7 @@
                 </columns>
 
                 <items>
-                    <ColumnListItem>
+                    <ColumnListItem type="Navigation" press=".onTripPress">
                         <cells>
                             <ObjectIdentifier title="{detail>Name}" />
                             <Text text="{parts: ['detail>StartsAt', 'detail>EndsAt'], formatter: '.formatPeriod'}" />

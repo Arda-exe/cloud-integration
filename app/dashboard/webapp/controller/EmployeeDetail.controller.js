@@ -133,6 +133,14 @@ sap.ui.define([
             oDetail.setProperty("/locationText", sText);
         },
 
+        onTripPress: function (oEvent) {
+            var oTrip = oEvent.getSource().getBindingContext("detail").getObject();
+            this.getOwnerComponent().getRouter().navTo("trip", {
+                userName: this._sUserName,
+                tripId: oTrip.TripId
+            });
+        },
+
         onNavBack: function () {
             this.getOwnerComponent().getRouter().navTo("employees");
         },

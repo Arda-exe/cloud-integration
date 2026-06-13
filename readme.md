@@ -54,13 +54,16 @@ Local login uses mocked basic auth. Test users (password `test` for all):
   profile (name, emails, home city), chronological trips with a period filter, and a
   "location lookup" that shows where the employee was on a chosen date (on a trip, or
   at home).
+- **Trip detail** — click any trip to open a detail page showing the trip facts
+  (period, budget, description, tags) and its approval metadata (status, company, team,
+  notes).
 - **Airports tab** — world map with a marker per airport plus a searchable list
   (name, IATA/ICAO codes, city, country).
 
 ### Planned
 
-- Trip detail page (flights, airports, involved people, approval status & notes)
-- Cross-navigation: employee → trip → airport/airline → back
+- Flight-level trip details (legs, airlines, connecting airports) and cross-navigation
+  from a trip to its airports and airlines
 - Top airlines & top routes on the Overview tab
 - Global search across employees, airports and airlines
 - Coordinator actions in the UI (add trip, approve/reject)

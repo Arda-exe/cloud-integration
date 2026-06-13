@@ -104,6 +104,17 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   because the backend ignores `$filter`/`$orderby`; swap to server-side binding filters
   once the backend forwards queries. NB: the profile header shows the wrong person until
   backend issue 2 is fixed (keyed reads ignore the key).
+- **Feature 3 done (partially) — Trip detail**: reached by clicking a trip row on the
+  employee detail (route `employees/{userName}/trips/{tripId}` — tripId is only unique
+  within a person, so both live in the path; `TripDetail.view.xml`). Shows trip facts
+  (name, period, budget, description, tags) from `PersonTrips` — the trip is matched
+  **client-side by `TripId`** because keyed trip-reads return the wrong row (issue 2) —
+  plus the **extension fields** (approval status as a coloured `ObjectStatus`, company,
+  team, notes) read from `/trips/TripExtensions` via a composite-key filter
+  (`personUserName`+`tripId`) with an explicit `$select` (the table is empty today, so it
+  shows "Not submitted" / —). **Flights are a "coming soon" `MessageStrip`**: `PlanItems`
+  is unreachable (issue 9). This also delivers the employee→trip leg of **feature 4
+  (cross-navigation)**; trip→airport/airline needs flight data.
 - **Feature 5 done (partially) — Overview**: KPI tiles (`GenericTile`/`NumericContent`:
   employees, trips, total budget, airports, airlines) + "Top travellers" `sap.f.Card`.
   Counts are computed client-side over the loaded sets (so they reflect TripPin's first
@@ -135,9 +146,11 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 1. ~~Employees tab: searchable list, click-through to employee detail page.~~ ✅ done
 2. ~~Employee detail: profile + chronological trips with time filtering; show the person's
    location on a chosen date.~~ ✅ done (header shows wrong person until backend issue 2 is fixed)
-3. Trip detail page (reached from an employee): flights, airports, involved people,
-   plus the extension fields (approval status, company, team, notes).
-4. Cross-navigation: employee → trip → airport/airline → back to people.
+3. ~~Trip detail page (reached from an employee): plus the extension fields (approval
+   status, company, team, notes).~~ ✅ done (partially) — facts + extension fields shown;
+   flights/airports/involved people blocked until `PlanItems` is reachable (issue 9).
+4. Cross-navigation: employee → trip → airport/airline → back to people. ⏳ partially —
+   employee → trip done; trip → airport/airline needs flight data (issue 9).
 5. ~~Overview tab: KPI cards (totals).~~ ✅ done — except **top airlines/top routes**:
    blocked until flight data (`PlanItems`) is reachable (backend issue 9).
 6. ~~Airports tab: list + map visualization.~~ ✅ done (Leaflet/OSM)

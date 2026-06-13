@@ -1,0 +1,61 @@
+_schema-version: "3.1"
+ID: primepath-travel
+description: PrimePath Travel Dashboard
+version: 1.0.0
+
+modules:
+  - name: primepath-travel-srv
+    type: nodejs
+    path: .
+    parameters:
+      buildpack: nodejs_buildpack
+      disk-quota: 512M
+      memory: 256M
+    build-parameters:
+      builder: npm
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: primepath-xsuaa
+      - name: primepath-destination
+
+  - name: primepath-travel-approuter
+    type: approuter.nodejs
+    path: approuter
+    parameters:
+      disk-quota: 256M
+      memory: 128M
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: primepath-xsuaa
+
+resources:
+  - name: primepath-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+
+  - name: primepath-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        init_data:
+          instance:
+            existing_destinations_policy: update
+            destinations:
+              - Name: TripPin
+                URL: https://services.odata.org/V4/TripPinService
+                Type: HTTP
+                ProxyType: Internet
+                Authentication: NoAuthentication

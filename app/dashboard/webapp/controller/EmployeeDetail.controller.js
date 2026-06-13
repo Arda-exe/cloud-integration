@@ -139,6 +139,17 @@ sap.ui.define([
                 userName: this._sUserName,
                 tripId: oTrip.TripId
             });
+
+            this._loadTrips(sUserName);
+        },
+
+        _loadTrips: function (sUserName) {
+            var oView = this.getView();
+            fetch("/trips/PersonTrips?$filter=personUserName eq '" + sUserName + "'")
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    oView.setModel(new JSONModel({ trips: data.value ?? [] }), "tripData");
+                });
         },
 
         onNavBack: function () {
@@ -162,5 +173,9 @@ sap.ui.define([
                 + this._oDateFormat.format(new Date(sEndsAt));
         }
 
+        formatDate: function (sDate) {
+            if (!sDate) return "";
+            return new Date(sDate).toLocaleDateString("nl-BE");
+        }
     });
 });

@@ -6,7 +6,7 @@
 
     <Page
         id="employeePage"
-        title="{i18n>employeeDetailTitle}"
+        title="Employee Detail"
         showNavButton="true"
         navButtonPress=".onNavBack">
 
@@ -16,7 +16,7 @@
                 intro="{people>UserName}">
                 <attributes>
                     <ObjectAttribute
-                        title="{i18n>lblEmail}"
+                        title="Email"
                         text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" />
                     <ObjectAttribute
                         title="{i18n>lblCity}"
@@ -86,6 +86,17 @@
             </Table>
         </content>
 
+            <List
+                id="tripsList"
+                items="{tripData>/trips}"
+                noDataText="Geen trips gevonden">
+                <StandardListItem
+                    title="{tripData>Name}"
+                    description="{tripData>Description}"
+                    info="{path: 'tripData>StartsAt', formatter: '.formatDate'} - {path: 'tripData>EndsAt', formatter: '.formatDate'}"
+                    infoState="None" />
+            </List>
+        </content>
     </Page>
 
 </mvc:View>

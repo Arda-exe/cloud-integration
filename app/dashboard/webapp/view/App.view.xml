@@ -9,7 +9,13 @@
     <VBox height="100vh" renderType="Bare">
 
         <f:ShellBar
-            title="{i18n>shellTitle}" />
+            title="{i18n>shellTitle}">
+            <f:searchManager>
+                <f:SearchManager
+                    placeholder="{i18n>globalSearchPlaceholder}"
+                    search=".onGlobalSearch" />
+            </f:searchManager>
+        </f:ShellBar>
 
         <IconTabHeader
             id="tabHeader"

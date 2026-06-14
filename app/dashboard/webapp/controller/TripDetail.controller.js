@@ -146,6 +146,7 @@ sap.ui.define([
 
             var sStatus = oExt && oExt.approvalStatus;
             oModel.setProperty("/ext", {
+                exists: !!oExt,
                 statusText: sStatus || oBundle.getText("approvalNone"),
                 statusState: STATUS_STATE[sStatus] || "None",
                 company: (oExt && oExt.company) || sNone,
@@ -173,6 +174,91 @@ sap.ui.define([
             this.getOwnerComponent().getRouter().navTo("employee", {
                 userName: this._sUserName
             });
+        },
+
+        // ---- Feature 8: approval record (coordinator-only) -----------------
+
+        // Submit = nieuw TripExtension aanmaken (status default 'pending'). Knop is
+        // uitgeschakeld zodra er al een record bestaat (samengestelde sleutel → geen
+        // dubbele create).
+        onOpenApprovalForm: function () {
+            var that = this;
+            var fnOpen = function () {
+                that.byId("approvalCompany").setValue("");
+                that.byId("approvalTeam").setValue("");
+                that.byId("approvalNotes").setValue("");
+                that._oApprovalDialog.open();
+            };
+            if (this._oApprovalDialog) {
+                fnOpen();
+                return;
+            }
+            this.loadFragment({ name: "primepath.dashboard.view.ApprovalForm" }).then(function (oDialog) {
+                that._oApprovalDialog = oDialog;
+                fnOpen();
+            });
+        },
+
+        onSubmitApproval: function () {
+            var that = this;
+            var oModel = this.getOwnerComponent().getModel("trips");
+            var oListBinding = oModel.bindList("/TripExtensions");
+            var oNewContext = oListBinding.create({
+                personUserName: this._sUserName,
+                tripId: this._iTripId,
+                company: this.byId("approvalCompany").getValue(),
+                team: this.byId("approvalTeam").getValue(),
+                notes: this.byId("approvalNotes").getValue()
+            });
+            oNewContext.created().then(function () {
+                MessageToast.show(that._bundle().getText("approvalSubmitted"));
+                that._oApprovalDialog.close();
+                that._load();
+            }).catch(function (oError) {
+                Log.error("Submitting approval record failed", oError);
+                MessageToast.show(that._bundle().getText("approvalSubmitError"));
+            });
+        },
+
+        onCancelApproval: function () {
+            this._oApprovalDialog.close();
+        },
+
+        onApprove: function () {
+            this._invokeExtAction("approve");
+        },
+
+        onReject: function () {
+            this._invokeExtAction("rejectTrip");
+        },
+
+        // Bound action op TripExtensions; FQN = TripsService.<actie> (zie EDMX).
+        _invokeExtAction: function (sAction) {
+            var that = this;
+            var oModel = this.getOwnerComponent().getModel("trips");
+            var oEntityContext = oModel.bindContext(this._extPath()).getBoundContext();
+            var oOperation = oModel.bindContext("TripsService." + sAction + "(...)", oEntityContext);
+            return oOperation.execute().then(function () {
+                MessageToast.show(that._bundle().getText("approvalActionDone"));
+                that._load();
+            }).catch(function (oError) {
+                Log.error("Action " + sAction + " failed", oError);
+                MessageToast.show(that._bundle().getText("approvalActionError"));
+            });
+        },
+
+        // sleutelpad voor TripExtensions: String-sleutel tussen quotes (' → ''),
+        // Integer-sleutel kaal
+        _extPath: function () {
+            var sUser = "'" + String(this._sUserName).replace(/'/g, "''") + "'";
+            return "/TripExtensions(personUserName=" + sUser + ",tripId=" + this._iTripId + ")";
+        },
+
+        onExit: function () {
+            if (this._oApprovalDialog) {
+                this._oApprovalDialog.destroy();
+                this._oApprovalDialog = null;
+            }
         },
 
         _bundle: function () {

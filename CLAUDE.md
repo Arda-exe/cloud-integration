@@ -50,6 +50,8 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 - `srv/` — CAP services + handlers (the backend team's area).
   - `srv/external/TripPin.{cds,xml}` — imported TripPin EDMX metadata.
   - Currently four separate services: people, trips, airlines, airports.
+  - `srv/user-service.{cds,js}` — `/user/whoami()` role endpoint, added by the frontend team
+    for feature 8 gating (see "Frontend-team backend additions").
 - `app/dashboard/webapp/` — the freestyle SAPUI5 app (the frontend team's area). See "Frontend status".
 - `xs-security.json` — XSUAA scopes/role templates (TravelCoordinator, TeamLead, HR).
 - `mta.yaml` + `approuter/` — BTP deployment descriptor and approuter (added in `efbb74a`).
@@ -124,16 +126,18 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   plus the **extension fields** (approval status as a coloured `ObjectStatus`, company,
   team, notes) read from `/trips/TripExtensions` via a composite-key filter
   (`personUserName`+`tripId`) with an explicit `$select` (the table is empty today, so it
-  shows "Not submitted" / —). **Flights are a "coming soon" `MessageStrip`**: `PlanItems`
-  is unreachable (issue 9). This also delivers the employee→trip leg of **feature 4
-  (cross-navigation)**; trip→airport/airline needs flight data.
+  shows "Not submitted" / —). **Flights table done (14 June)** — loads `/trips/PlanItems`
+  (flight no. + airline, from/to airports, departure/arrival, seat) via a two-part
+  `personUserName`+`tripId` filter; `PlanItems` is now reachable (issue 9 resolved for
+  flights). The From/To cells are `Link`s that cross-navigate to the Airports map
+  (feature 4). A coordinator-only approve/reject/submit footer was added — see feature 8.
 - **Feature 5 done (partially) — Overview**: KPI tiles (`GenericTile`/`NumericContent`:
   employees, trips, total budget, airports, airlines) + "Top travellers" `sap.f.Card`.
   Counts are computed client-side over the loaded sets (so they reflect TripPin's first
   page until backend issue 3 is fixed); trips are aggregated with one `PersonTrips`
-  request per person. **Top airlines / top routes are still missing**: they need flight
-  data (`PlanItems`), and navigation paths like `PersonTrips(...)/PlanItems` return 501
-  (backend issue 9).
+  request per person. **Top airlines / top routes done (14 June)** — a second progressive
+  phase aggregates `/trips/PlanItems` across every (person, trip) pair into two `sap.f.Card`
+  lists, each with its own busy indicator so the KPI tiles render first.
 - **Feature 6 done — Airports**: table (name, IATA, ICAO, city, country) with
   client-side search + **Leaflet/OpenStreetMap map** with a marker per airport
   (coordinates from `Location.Loc`, GeoJSON `[lon, lat]` — flip to `[lat, lon]` for
@@ -143,6 +147,29 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   `invalidateSize()` on re-entry of the tab. Table rows are clickable
   (`onAirportPress` → `_focusAirport` pans/zooms the map to that marker and opens its
   popup; markers are kept in `_mMarkers` keyed by ICAO).
+- **Feature 4 done (14 June) — Cross-navigation**: employee → trip → airport. Flight From/To
+  `Link`s navigate to a new `airports/{iata}` route (`airportFocus`) that focuses the Leaflet
+  map on that airport (IATA→ICAO resolved from the loaded set; `_sPendingIata` deferred-focus
+  guard for cold deep-links). Airlines are surfaced inline (flight rows, Overview cards,
+  global search) — no Airlines tab (kept the 3-tab structure). "Back to people" is via the
+  nav buttons / tabs / global search.
+- **Feature 7 done (14 June) — Global search**: `sap.f.SearchManager` in the ShellBar searches
+  across employees/airports/airlines (client-side over a cached set) and shows grouped results
+  in a `Dialog` (`SearchResults.fragment.xml` — the app's **first fragment**, cached +
+  `addDependent`). Click-through: employee → detail, airport → `airportFocus`, airline →
+  informational toast. Zero matches → toast instead of an empty dialog.
+- **Feature 8 done (14 June) — Coordinator actions**: a footer on `TripDetail` (visible only to
+  `TravelCoordinator`) with **Submit / Approve / Reject**. Submit creates a `TripExtension`
+  (pending) via `ApprovalForm.fragment.xml` (`bindList("/TripExtensions").create(...)`);
+  Approve/Reject invoke the bound `TripsService.approve` / `TripsService.rejectTrip` actions
+  (`bindContext("TripsService.approve(...)", ctx).execute()`), then reload the snapshot. Role
+  gating uses a Component-level `app` JSON model populated from **`GET /user/whoami()`** (see
+  "Frontend-team backend additions"). Approve/Reject are disabled until a record exists
+  (Submit first); the whole footer is hidden for TeamLead/HR.
+- **Bug fix (14 June)**: `TripDetail` and `Overview` filtered `PersonTrips` on the trip-title
+  field `Name` instead of `personUserName`; the backend regex no longer matched (no fallback),
+  so Trip Detail failed to load and Overview trip-counts/budget were silently zero. Both now
+  use `personUserName` (same as `EmployeeDetail`).
 - **Polish**: `EmployeeDetail` trips table and `Overview` show a busy indicator while
   loading and a `MessageToast` on load failure; `Employees`/`Airports` have empty-state
   `noDataText`.
@@ -159,15 +186,16 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 2. ~~Employee detail: profile + chronological trips with time filtering; show the person's
    location on a chosen date.~~ ✅ done (header now correct; merge damage repaired 13 June)
 3. ~~Trip detail page (reached from an employee): plus the extension fields (approval
-   status, company, team, notes).~~ ✅ done (partially) — facts + extension fields shown;
-   flights/airports/involved people blocked until `PlanItems` is reachable (issue 9).
-4. Cross-navigation: employee → trip → airport/airline → back to people. ⏳ partially —
-   employee → trip done; trip → airport/airline needs flight data (issue 9).
-5. ~~Overview tab: KPI cards (totals).~~ ✅ done — except **top airlines/top routes**:
-   blocked until flight data (`PlanItems`) is reachable (backend issue 9).
+   status, company, team, notes).~~ ✅ done — facts + extension fields + **flights table**
+   (`PlanItems`).
+4. ~~Cross-navigation: employee → trip → airport/airline → back to people.~~ ✅ done —
+   employee → trip → airport (map focus). Airlines surfaced inline (no Airlines tab);
+   "back to people" via nav buttons / tabs / global search.
+5. ~~Overview tab: KPI cards (totals).~~ ✅ done — incl. **top airlines / top routes**.
 6. ~~Airports tab: list + map visualization.~~ ✅ done (Leaflet/OSM)
-7. Global search across employees, airports, airlines.
-8. Coordinator-only: add trip, approve/reject (UI side of the actions).
+7. ~~Global search across employees, airports, airlines.~~ ✅ done
+8. Coordinator-only: **approve/reject + submit approval record** ✅ done; **add trip (to our
+   own DB)** ⏳ deferred — needs backend (see "Backend needed: Add Trip (DB)").
 
 ## Out of scope
 
@@ -178,15 +206,16 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
 
 ## Known backend issues (context only — do NOT fix unprompted)
 
-First verified 12 June; **re-checked against HEAD on 13 June 2026** after the PR #4 merge.
-Statuses changed — current verdict per issue (commit refs in parentheses):
+First verified 12 June; re-checked 13 June; **re-checked 14 June 2026** — the backend's
+`83289f3`/`5adfa93`/`3d38f5a` commits changed several statuses. Current verdict per issue:
 
-- #1 **still broken** · #2 **partially fixed** (people/airports/airlines proxy forwards
-  query options + keyed reads; `trips-service.js` was NOT given the proxy) · #3 **still
-  broken** · #4 **degraded** (structured parse from `fb1a563` replaced by a brittle regex
-  in `a7e5f5b`) · #5 **regressed** (handlers existed at `fb1a563`/`efbb74a`, dropped when
-  `a7e5f5b` rewrote the file) · #6 **fixed** (`rejectTrip` rename) · #7 still open · #8
-  still a recommendation · #9 **still broken** · #10 **still applies**.
+- #1 **still broken** · #2 **partially fixed** (people/airports/airlines forward query
+  options + keyed reads; `trips-service.js` uses a regex, not the proxy) · #3 **still
+  broken** · #4 **degraded** (brittle regex) · #5 **FIXED [14 June]** — `approve` /
+  `rejectTrip` handlers are now present in `trips-service.js` · #6 **fixed** (`rejectTrip`
+  rename) · #7 still open · #8 still a recommendation · #9 **FIXED for flights [14 June]** —
+  `/trips/PlanItems` returns flattened flight rows (`$expand=From,To,Airline`); composition
+  navigation paths may still 501 · #10 **still applies**.
 
 Original descriptions below (changed ones carry a **[13 June: …]** status tag):
 
@@ -219,6 +248,9 @@ Original descriptions below (changed ones carry a **[13 June: …]** status tag)
    REGRESSED and still broken — the actions are now named `approve()`/`rejectTrip()` in
    the CDS but still have **zero handlers** in `trips-service.js`. Handlers existed at
    `fb1a563`/`efbb74a` but were dropped when `a7e5f5b` rewrote the file. Calling → 501.]**
+   **[14 June: FIXED — `trips-service.js` now has `on('approve','TripExtensions')` and
+   `on('rejectTrip','TripExtensions')` handlers doing `UPDATE(req.subject).set({approvalStatus})`.
+   Frontend feature 8 calls them as bound actions `TripsService.approve`/`rejectTrip`.]**
 6. `cds watch` warns that the custom action **`reject()`** shadows the equally named
    method of the `ApplicationService` base class — CAP cannot generate the typed
    convenience method. Suggest renaming the action (e.g. `rejectTrip`). **[13 June: FIXED
@@ -235,7 +267,11 @@ Original descriptions below (changed ones carry a **[13 June: …]** status tag)
    sets themselves, and the auto-exposed composition targets have `@cds.persistence.skip`.
    This blocks flight data (`PlanItems` → `Flight` → airline/from/to), which the frontend
    needs for the trip detail page (feature 3) and the top-airlines/top-routes KPIs
-   (feature 5). Query forwarding (fix 1) plus exposing `PlanItems` solves this.
+   (feature 5). Query forwarding (fix 1) plus exposing `PlanItems` solves this. **[14 June:
+   FIXED for flights — a dedicated `PlanItems` entity + on-READ handler (`83289f3`) fetches
+   `People('x')/Trips(n)/PlanItems/…Flight?$expand=From,To,Airline` and returns flattened
+   rows (airline, from/to IATA+name+city, times, seat); filter on `personUserName`+`tripId`,
+   both required. Features 3/4/5 consume it. Other composition paths may still 501.]**
 10. Raw passthrough of TripPin JSON leaks foreign metadata into our responses:
    absolute `@odata.id`/`@odata.editLink` pointing at services.odata.org, `Concurrency`
    (Int64) serialized as a JSON number even when the client requests
@@ -279,6 +315,35 @@ important is stranded on the dangling `frontend` branch.)
 **Merge hygiene:** backend files under `srv/` were rewritten on the *frontend* branch
 (`a7e5f5b`), which is how the backend team's fixes got lost. Keep backend work on backend branches and
 the frontend out of `srv/` per the team split.
+
+## Frontend-team backend additions (for backend review)
+
+- **`/user/whoami()`** (`srv/user-service.cds` + `.js`, added 14 June): a small isolated
+  `UserService @(path:'/user')` exposing `function whoami() returns { id; roles[] }`, where
+  `roles = ['TravelCoordinator','TeamLead','HR'].filter(r => req.user.is(r))`. The frontend
+  reads it once (Component → `app` JSON model) to show/hide coordinator-only UI (feature 8).
+  Works under mocked auth and XSUAA. Kept in its **own files + own commit** so the backend
+  team can review or relocate it. (The frontend team explicitly approved this cross-team
+  addition — it's the only way the client can learn the user's role for gating.)
+
+## Backend needed: Add Trip (DB) — feature 8 "add trip" (NOT yet implemented)
+
+"Add trip" means a coordinator creating a **new trip in our own CAP database** (NOT TripPin —
+TripPin stays read-only). The backend for this **does not exist yet**, so the **frontend is
+deferred** until it does. Suggested shape for the backend team:
+
+- A persistable entity, e.g. `primepath.LocalTrip` (in `db/schema.cds`): `key ID : UUID`,
+  `personUserName : String`, `name`, `description`, `startsAt`/`endsAt : DateTime`,
+  `budget : Decimal`, plus audit fields. Keep it **separate** from `TripExtension` (which is
+  approval metadata on *TripPin* trips, not a trip itself).
+- Expose it in a service with **CREATE restricted to `TravelCoordinator`** and READ for the
+  other roles (mirror the `TripExtensions` `@restrict`).
+- **Decision needed:** how local DB trips surface on the Employee detail alongside TripPin
+  trips — a separate "Company trips" table, or merged into the existing trips list (a union;
+  mind the key story: TripPin TripIds are per-person ints, `LocalTrip` uses a UUID).
+
+Once this exists, the frontend adds a coordinator-only "Add trip" dialog and shows the local
+trips on the employee detail. **Do not build the frontend part until the entity/service is live.**
 
 ## Working style
 

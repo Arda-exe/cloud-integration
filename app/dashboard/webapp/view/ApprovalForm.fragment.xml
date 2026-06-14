@@ -1,0 +1,22 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Dialog title="{i18n>approvalFormTitle}" contentWidth="28rem">
+        <VBox class="sapUiSmallMargin">
+            <Label text="{i18n>lblCompany}" labelFor="approvalCompany" />
+            <Input id="approvalCompany" />
+            <Label text="{i18n>lblTeam}" labelFor="approvalTeam" class="sapUiSmallMarginTop" />
+            <Input id="approvalTeam" />
+            <Label text="{i18n>lblNotes}" labelFor="approvalNotes" class="sapUiSmallMarginTop" />
+            <TextArea id="approvalNotes" rows="3" width="100%" />
+        </VBox>
+        <beginButton>
+            <Button text="{i18n>btnSubmit}" type="Emphasized" press=".onSubmitApproval" />
+        </beginButton>
+        <endButton>
+            <Button text="{i18n>btnCancel}" press=".onCancelApproval" />
+        </endButton>
+    </Dialog>
+
+</core:FragmentDefinition>

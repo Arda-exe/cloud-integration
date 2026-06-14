@@ -114,6 +114,27 @@
             </Panel>
         </content>
 
+        <footer>
+            <OverflowToolbar visible="{app>/user/isCoordinator}">
+                <ToolbarSpacer />
+                <Button
+                    text="{i18n>btnSubmit}"
+                    type="Emphasized"
+                    enabled="{= !${trip>/ext/exists} }"
+                    press=".onOpenApprovalForm" />
+                <Button
+                    text="{i18n>btnApprove}"
+                    type="Accept"
+                    enabled="{trip>/ext/exists}"
+                    press=".onApprove" />
+                <Button
+                    text="{i18n>btnReject}"
+                    type="Reject"
+                    enabled="{trip>/ext/exists}"
+                    press=".onReject" />
+            </OverflowToolbar>
+        </footer>
+
     </Page>
 
 </mvc:View>

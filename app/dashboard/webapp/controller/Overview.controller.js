@@ -14,8 +14,11 @@ sap.ui.define([
         onInit: function () {
             this.getView().setModel(new JSONModel({
                 busy: true,
+                flightsBusy: true,
                 kpi: { employees: "", trips: "", budget: "", airports: "", airlines: "" },
-                topTravellers: []
+                topTravellers: [],
+                topAirlines: [],
+                topRoutes: []
             }), "view");
             this._loadKpis();
         },
@@ -56,6 +59,9 @@ sap.ui.define([
                         });
                 }));
             }).then(function (aPerPerson) {
+                // hergebruikt door fase 2 (top airlines/routes) zodat PersonTrips
+                // niet opnieuw wordt opgehaald
+                that._aPerPerson = aPerPerson;
                 var iTrips = 0;
                 var fBudget = 0;
                 aPerPerson.forEach(function (oEntry) {
@@ -84,10 +90,84 @@ sap.ui.define([
                     });
                 oViewModel.setProperty("/topTravellers", aTop);
                 oViewModel.setProperty("/busy", false);
+                // fase 2: vlucht-aggregaten progressief bijladen (eigen busy-indicator)
+                that._loadFlightAggregates();
             }).catch(function (oError) {
                 Log.error("Loading overview KPIs failed", oError);
                 oViewModel.setProperty("/busy", false);
+                oViewModel.setProperty("/flightsBusy", false);
                 MessageToast.show(oBundle.getText("kpiLoadError"));
+            });
+        },
+
+        // Top airlines (op aantal vluchten) en top routes (op from→to paar), berekend
+        // over alle (persoon, trip) paren via /trips/PlanItems. Veel requests, dus één
+        // Promise.all met per-request soft-fail.
+        _loadFlightAggregates: function () {
+            var oVM = this.getView().getModel("view");
+            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            var oTrips = this.getOwnerComponent().getModel("trips");
+
+            var aPairs = [];
+            (this._aPerPerson || []).forEach(function (oEntry) {
+                oEntry.trips.forEach(function (oTrip) {
+                    aPairs.push({ user: oEntry.person.UserName, tripId: oTrip.TripId });
+                });
+            });
+            if (!aPairs.length) {
+                oVM.setProperty("/flightsBusy", false);
+                return;
+            }
+
+            Promise.all(aPairs.map(function (oPair) {
+                return oTrips.bindList("/PlanItems", undefined, undefined, [
+                    new Filter("personUserName", FilterOperator.EQ, oPair.user),
+                    new Filter("tripId", FilterOperator.EQ, oPair.tripId)
+                ], { $select: "airlineCode,airlineName,fromIata,fromName,toIata,toName" })
+                .requestContexts(0, 200)
+                .then(function (aContexts) {
+                    return aContexts.map(function (oContext) { return oContext.getObject(); });
+                })
+                .catch(function () { return []; });
+            })).then(function (aPerPair) {
+                var mAir = {};
+                var mRoute = {};
+                aPerPair.forEach(function (aFlights) {
+                    aFlights.forEach(function (oFlight) {
+                        if (oFlight.airlineCode) {
+                            var oA = mAir[oFlight.airlineCode] || (mAir[oFlight.airlineCode] =
+                                { name: oFlight.airlineName || oFlight.airlineCode, count: 0 });
+                            oA.count++;
+                        }
+                        if (oFlight.fromIata && oFlight.toIata) {
+                            var sKey = oFlight.fromIata + "->" + oFlight.toIata;
+                            var oR = mRoute[sKey] || (mRoute[sKey] = {
+                                label: oFlight.fromIata + " → " + oFlight.toIata,
+                                sub: (oFlight.fromName || oFlight.fromIata) + " – "
+                                    + (oFlight.toName || oFlight.toIata),
+                                count: 0
+                            });
+                            oR.count++;
+                        }
+                    });
+                });
+                var fnTop = function (mMap, fnMap) {
+                    return Object.keys(mMap)
+                        .map(function (sK) { return mMap[sK]; })
+                        .sort(function (a, b) { return b.count - a.count; })
+                        .slice(0, 5)
+                        .map(fnMap);
+                };
+                oVM.setProperty("/topAirlines", fnTop(mAir, function (o) {
+                    return { name: o.name, info: oBundle.getText("topFlightsCount", [o.count]) };
+                }));
+                oVM.setProperty("/topRoutes", fnTop(mRoute, function (o) {
+                    return { name: o.label, sub: o.sub, info: oBundle.getText("topRoutesCount", [o.count]) };
+                }));
+                oVM.setProperty("/flightsBusy", false);
+            }).catch(function (oError) {
+                Log.error("Loading flight aggregates failed", oError);
+                oVM.setProperty("/flightsBusy", false);
             });
         }
 

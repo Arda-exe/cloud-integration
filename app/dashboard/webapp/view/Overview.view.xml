@@ -38,20 +38,63 @@
                     </GenericTile>
                 </FlexBox>
 
-                <f:Card width="22rem" class="sapUiSmallMargin">
-                    <f:header>
-                        <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
-                    </f:header>
-                    <f:content>
-                        <List items="{view>/topTravellers}" showSeparators="Inner">
-                            <StandardListItem
-                                title="{view>name}"
-                                info="{view>tripsLabel}"
-                                icon="sap-icon://customer"
-                                iconDensityAware="false" />
-                        </List>
-                    </f:content>
-                </f:Card>
+                <FlexBox wrap="Wrap">
+                    <f:Card width="22rem" class="sapUiSmallMargin">
+                        <f:header>
+                            <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
+                        </f:header>
+                        <f:content>
+                            <List items="{view>/topTravellers}" showSeparators="Inner">
+                                <StandardListItem
+                                    title="{view>name}"
+                                    info="{view>tripsLabel}"
+                                    icon="sap-icon://customer"
+                                    iconDensityAware="false" />
+                            </List>
+                        </f:content>
+                    </f:Card>
+
+                    <f:Card width="22rem" class="sapUiSmallMargin">
+                        <f:header>
+                            <card:Header title="{i18n>topAirlinesTitle}" iconSrc="sap-icon://flight" />
+                        </f:header>
+                        <f:content>
+                            <List
+                                items="{view>/topAirlines}"
+                                showSeparators="Inner"
+                                busy="{view>/flightsBusy}"
+                                busyIndicatorDelay="100"
+                                noDataText="{i18n>topAirlinesNoData}">
+                                <StandardListItem
+                                    title="{view>name}"
+                                    info="{view>info}"
+                                    icon="sap-icon://flight"
+                                    iconDensityAware="false" />
+                            </List>
+                        </f:content>
+                    </f:Card>
+
+                    <f:Card width="22rem" class="sapUiSmallMargin">
+                        <f:header>
+                            <card:Header title="{i18n>topRoutesTitle}" iconSrc="sap-icon://journey-arrive" />
+                        </f:header>
+                        <f:content>
+                            <List
+                                items="{view>/topRoutes}"
+                                showSeparators="Inner"
+                                busy="{view>/flightsBusy}"
+                                busyIndicatorDelay="100"
+                                noDataText="{i18n>topRoutesNoData}">
+                                <StandardListItem
+                                    title="{view>name}"
+                                    description="{view>sub}"
+                                    info="{view>info}"
+                                    icon="sap-icon://journey-arrive"
+                                    iconDensityAware="false" />
+                            </List>
+                        </f:content>
+                    </f:Card>
+                </FlexBox>
 
             </VBox>
         </content>

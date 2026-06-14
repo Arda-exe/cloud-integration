@@ -1,6 +1,11 @@
 {
     "xsappname": "primepath-travel",
     "tenant-mode": "dedicated",
+    "oauth2-configuration": {
+        "redirect-uris": [
+            "https://a51ddd7atrial-dev-primepath-travel-approuter.cfapps.us10-001.hana.ondemand.com/**"
+        ]
+    },
     "scopes": [
         {
             "name": "$XSAPPNAME.TravelCoordinator",

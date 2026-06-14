@@ -1,9 +1,10 @@
 _schema-version: "3.1"
 ID: primepath-travel
 description: PrimePath Travel Dashboard
-version: 1.0.0
+version: 1.2.0
 
 modules:
+  # CAP Backend
   - name: primepath-travel-srv
     type: nodejs
     path: .
@@ -21,6 +22,7 @@ modules:
       - name: primepath-xsuaa
       - name: primepath-destination
 
+  # Application Router
   - name: primepath-travel-approuter
     type: approuter.nodejs
     path: approuter

@@ -145,6 +145,11 @@
                     "target": "airports"
                 },
                 {
+                    "name": "airportFocus",
+                    "pattern": "airports/{iata}",
+                    "target": "airports"
+                },
+                {
                     "name": "trip",
                     "pattern": "employees/{userName}/trips/{tripId}",
                     "target": "trip"

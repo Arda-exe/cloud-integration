@@ -154,6 +154,21 @@ sap.ui.define([
             });
         },
 
+        onFromPress: function (oEvent) {
+            this._navToAirport(oEvent.getSource().getBindingContext("trip").getObject().fromIata);
+        },
+
+        onToPress: function (oEvent) {
+            this._navToAirport(oEvent.getSource().getBindingContext("trip").getObject().toIata);
+        },
+
+        // cross-navigatie vlucht → luchthaven: open de Airports-tab en zoom in (op IATA)
+        _navToAirport: function (sIata) {
+            if (sIata) {
+                this.getOwnerComponent().getRouter().navTo("airportFocus", { iata: sIata });
+            }
+        },
+
         onNavBack: function () {
             this.getOwnerComponent().getRouter().navTo("employee", {
                 userName: this._sUserName

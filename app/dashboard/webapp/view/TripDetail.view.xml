@@ -100,8 +100,8 @@
                             <ColumnListItem vAlign="Middle">
                                 <cells>
                                     <ObjectIdentifier title="{trip>flightTitle}" text="{trip>airlineName}" />
-                                    <Text text="{trip>fromName} ({trip>fromIata})" />
-                                    <Text text="{trip>toName} ({trip>toIata})" />
+                                    <Link text="{trip>fromName} ({trip>fromIata})" press=".onFromPress" />
+                                    <Link text="{trip>toName} ({trip>toIata})" press=".onToPress" />
                                     <Text text="{trip>departure}" />
                                     <Text text="{trip>arrival}" />
                                     <Text text="{trip>seat}" />

@@ -11,6 +11,7 @@ sap.ui.define([
             this._aAllAirports = [];
             this._oMap = null;
             this._mMarkers = {};
+            this._sPendingIata = null;
             this.getView().setModel(new JSONModel({ airports: [], count: 0 }), "view");
 
             this._loadAirports();
@@ -18,8 +19,10 @@ sap.ui.define([
 
             // bij terugkeer naar de tab heeft de (verborgen geweest) kaart een
             // size-recalculatie nodig
-            this.getOwnerComponent().getRouter().getRoute("airports")
-                .attachPatternMatched(this._onShown, this);
+            var oRouter = this.getOwnerComponent().getRouter();
+            oRouter.getRoute("airports").attachPatternMatched(this._onShown, this);
+            // cross-navigatie vanaf een vlucht: airports/{iata} → zoom in op die luchthaven
+            oRouter.getRoute("airportFocus").attachPatternMatched(this._onFocusRoute, this);
         },
 
         _loadAirports: function () {
@@ -96,6 +99,40 @@ sap.ui.define([
                 aBounds.push(aLatLng);
             }, this);
             oMap.fitBounds(aBounds, { padding: [30, 30] });
+
+            // een cross-navigatie die vóór het renderen van de markers binnenkwam,
+            // is uitgesteld tot nu
+            if (this._sPendingIata) {
+                var sPending = this._sPendingIata;
+                this._sPendingIata = null;
+                this._focusByIata(sPending);
+            }
+        },
+
+        // afkomstig van de airportFocus-route (airports/{iata}); PlanItems levert alleen
+        // IATA, terwijl de markers op ICAO gesleuteld zijn → eerst IATA→ICAO opzoeken
+        _onFocusRoute: function (oEvent) {
+            this._onShown();
+            this._focusByIata(oEvent.getParameter("arguments").iata);
+        },
+
+        _focusByIata: function (sIata) {
+            if (!sIata) {
+                return;
+            }
+            // markers nog niet klaar (koude deep-link) → onthouden en later in
+            // _renderMarkers afhandelen
+            if (!this._aAllAirports.length || !this._bMarkersDone) {
+                this._sPendingIata = sIata;
+                return;
+            }
+            var sUpper = sIata.toUpperCase();
+            var oAirport = this._aAllAirports.find(function (oCandidate) {
+                return (oCandidate.IataCode || "").toUpperCase() === sUpper;
+            });
+            if (oAirport) {
+                this._focusAirport(oAirport.IcaoCode);
+            }
         },
 
         onAirportPress: function (oEvent) {

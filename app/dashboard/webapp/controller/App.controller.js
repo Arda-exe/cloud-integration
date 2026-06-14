@@ -15,7 +15,7 @@ sap.ui.define([
         onRouteMatched: function (oEvent) {
             var sRoute = oEvent.getParameter("name");
             // detail routes horen bij de tab van hun lijst
-            var mRouteToTab = { employee: "employees", trip: "employees" };
+            var mRouteToTab = { employee: "employees", trip: "employees", airportFocus: "airports" };
             this.byId("tabHeader").setSelectedKey(mRouteToTab[sRoute] || sRoute);
         },
 

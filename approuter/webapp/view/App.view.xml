@@ -1,0 +1,34 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.App"
+    displayBlock="true"
+    height="100%"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:f="sap.f"
+    xmlns="sap.m">
+
+    <VBox height="100vh" renderType="Bare">
+
+        <f:ShellBar
+            title="{i18n>shellTitle}" />
+
+        <IconTabHeader
+            id="tabHeader"
+            selectedKey="overview"
+            select=".onTabSelect"
+            mode="Inline">
+            <items>
+                <IconTabFilter key="overview" text="{i18n>tabOverview}" />
+                <IconTabFilter key="employees" text="{i18n>tabEmployees}" />
+                <IconTabFilter key="airports" text="{i18n>tabAirports}" />
+            </items>
+        </IconTabHeader>
+
+        <NavContainer id="content">
+            <layoutData>
+                <FlexItemData growFactor="1" />
+            </layoutData>
+        </NavContainer>
+
+    </VBox>
+
+</mvc:View>

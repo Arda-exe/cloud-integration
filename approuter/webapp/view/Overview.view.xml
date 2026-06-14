@@ -1,0 +1,60 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.Overview"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:f="sap.f"
+    xmlns:card="sap.f.cards"
+    xmlns="sap.m">
+
+    <Page showHeader="false">
+        <content>
+            <VBox class="sapUiMediumMargin" busy="{view>/busy}" busyIndicatorDelay="100">
+
+                <FlexBox wrap="Wrap">
+                    <GenericTile header="{i18n>kpiEmployees}" class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/employees}" icon="sap-icon://employee" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiTrips}" class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/trips}" icon="sap-icon://travel-itinerary" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiBudget}" class="sapUiTinyMargin">
+                        <TileContent unit="USD">
+                            <NumericContent value="{view>/kpi/budget}" scale="{view>/kpi/budgetScale}" icon="sap-icon://money-bills" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiAirports}" class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/airports}" icon="sap-icon://flight" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiAirlines}" class="sapUiTinyMargin">
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/airlines}" icon="sap-icon://globe" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                </FlexBox>
+
+                <f:Card width="22rem" class="sapUiSmallMargin">
+                    <f:header>
+                        <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
+                    </f:header>
+                    <f:content>
+                        <List items="{view>/topTravellers}" showSeparators="Inner">
+                            <StandardListItem
+                                title="{view>name}"
+                                info="{view>tripsLabel}"
+                                icon="sap-icon://customer"
+                                iconDensityAware="false" />
+                        </List>
+                    </f:content>
+                </f:Card>
+
+            </VBox>
+        </content>
+    </Page>
+
+</mvc:View>

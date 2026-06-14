@@ -1,0 +1,55 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.Employees"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+
+    <Page showHeader="false" backgroundDesign="List">
+        <content>
+            <Table
+                id="employeesTable"
+                items="{view>/people}"
+                growing="true"
+                growingThreshold="20"
+                noDataText="{i18n>employeesNoData}"
+                sticky="ColumnHeaders">
+
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title text="{i18n>employeesTableTitle} ({view>/count})" />
+                        <ToolbarSpacer />
+                        <SearchField
+                            id="searchField"
+                            width="20rem"
+                            placeholder="{i18n>employeesSearchPlaceholder}"
+                            liveChange=".onSearch" />
+                    </OverflowToolbar>
+                </headerToolbar>
+
+                <columns>
+                    <Column>
+                        <Text text="{i18n>colName}" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colUserName}" />
+                    </Column>
+                    <Column minScreenWidth="Desktop" demandPopin="true">
+                        <Text text="{i18n>colEmail}" />
+                    </Column>
+                </columns>
+
+                <items>
+                    <ColumnListItem type="Navigation" press=".onEmployeePress">
+                        <cells>
+                            <ObjectIdentifier title="{view>FirstName} {view>LastName}" />
+                            <Text text="{view>UserName}" />
+                            <Text text="{path: 'view>Emails', targetType: 'any', formatter: '.formatEmails'}" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+
+            </Table>
+        </content>
+    </Page>
+
+</mvc:View>

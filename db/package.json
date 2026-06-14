@@ -2,7 +2,8 @@
     "name": "primepath-travel-db",
     "version": "1.0.0",
     "dependencies": {
-        "@sap/hdi-deploy": "^5"
+        "@sap/hdi-deploy": "^5",
+        "hdb": "^0.19"
     },
     "scripts": {
         "start": "node node_modules/@sap/hdi-deploy/deploy.js"

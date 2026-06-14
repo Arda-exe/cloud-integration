@@ -1,6 +1,9 @@
-mta_archives/
-.git/
-.vscode/
-app/
-*.mtar
-Makefile_*
+build-parameters:
+      builder: npm
+      ignore:
+        - mta_archives/
+        - .git/
+        - .vscode/
+        - "*.mtar"
+        - "Makefile_*"
+        - ".primepath-travel_mta_build_tmp/"

@@ -1,0 +1,81 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.TripDetail"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m">
+
+    <Page
+        id="tripPage"
+        title="{i18n>tripDetailTitle}"
+        showNavButton="true"
+        navButtonPress=".onNavBack"
+        busy="{trip>/busy}"
+        busyIndicatorDelay="200">
+
+        <content>
+            <ObjectHeader
+                title="{trip>/trip/Name}"
+                intro="{trip>/personName}"
+                number="{trip>/trip/Budget}"
+                numberUnit="USD"
+                responsive="true">
+                <attributes>
+                    <ObjectAttribute title="{i18n>lblPeriod}" text="{trip>/periodText}" />
+                </attributes>
+            </ObjectHeader>
+
+            <Panel headerText="{i18n>tripInfoTitle}" class="sapUiSmallMarginBeginEnd sapUiSmallMarginTop">
+                <content>
+                    <VBox class="sapUiSmallMargin">
+                        <Text text="{trip>/trip/Description}" />
+                        <HBox alignItems="Center" wrap="Wrap" class="sapUiSmallMarginTop">
+                            <Label text="{i18n>lblTags}" class="sapUiTinyMarginEnd" />
+                            <HBox items="{trip>/tags}" wrap="Wrap">
+                                <ObjectStatus
+                                    text="{trip>name}"
+                                    state="Information"
+                                    inverted="true"
+                                    class="sapUiTinyMarginEnd" />
+                            </HBox>
+                        </HBox>
+                    </VBox>
+                </content>
+            </Panel>
+
+            <Panel headerText="{i18n>approvalTitle}" class="sapUiSmallMarginBeginEnd">
+                <content>
+                    <VBox class="sapUiSmallMargin">
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>lblApprovalStatus}" width="7rem" />
+                            <ObjectStatus text="{trip>/ext/statusText}" state="{trip>/ext/statusState}" />
+                        </HBox>
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>lblCompany}" width="7rem" />
+                            <Text text="{trip>/ext/company}" />
+                        </HBox>
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>lblTeam}" width="7rem" />
+                            <Text text="{trip>/ext/team}" />
+                        </HBox>
+                        <HBox class="sapUiTinyMarginBottom">
+                            <Label text="{i18n>lblNotes}" width="7rem" />
+                            <Text text="{trip>/ext/notes}" />
+                        </HBox>
+                    </VBox>
+                </content>
+            </Panel>
+
+            <Panel headerText="{i18n>flightsTitle}" class="sapUiSmallMarginBeginEnd sapUiSmallMarginBottom">
+                <content>
+                    <MessageStrip
+                        text="{i18n>flightsComingSoon}"
+                        type="Information"
+                        showIcon="true"
+                        class="sapUiSmallMargin" />
+                </content>
+            </Panel>
+        </content>
+
+    </Page>
+
+</mvc:View>

@@ -16,7 +16,6 @@ modules:
       ignore:
         - mta_archives/
         - .git/
-        - app/
         - .vscode/
         - "*.mtar"
         - "Makefile_*"

@@ -3,21 +3,30 @@ const cds = require('@sap/cds')
 const BASE = cds.env.requires?.TripPin?.credentials?.url
     ?? 'https://services.odata.org/V4/TripPinService'
 
-const proxy = async (entity, req) => {
-    const rawUrl = req._.req?.url ?? ''
-    const entityIndex = rawUrl.indexOf('/' + entity)
-    if (entityIndex >= 0) {
-        const entityPath = rawUrl.substring(entityIndex + 1)
-        const url = `${BASE}/${entityPath}`
-        const res = await fetch(url)
+const fetchAllPages = async (url) => {
+    let results = []
+    let nextUrl = url
+    while (nextUrl) {
+        const res = await fetch(nextUrl)
         const json = await res.json()
-        return json.value ?? json
+        results = results.concat(json.value ?? [])
+        nextUrl = json['@odata.nextLink'] ?? null
     }
-    const res = await fetch(`${BASE}/${entity}`)
-    const json = await res.json()
-    return json.value ?? []
+    return results
 }
 
 module.exports = cds.service.impl(async function () {
-    this.on('READ', 'Airports', req => proxy('Airports', req))
+    this.on('READ', 'Airports', async (req) => {
+        const rawUrl = req._.req?.url ?? ''
+        const entityIndex = rawUrl.indexOf('/Airports')
+        const entityPath = rawUrl.substring(entityIndex + 1)
+
+        if (entityPath.includes("('")) {
+            const res = await fetch(`${BASE}/${entityPath}`)
+            const json = await res.json()
+            return json.value ?? json
+        }
+
+        return fetchAllPages(`${BASE}/Airports`)
+    })
 })

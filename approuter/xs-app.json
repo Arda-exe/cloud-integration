@@ -1,5 +1,5 @@
 {
-    "welcomeFile": "/index.html",
+    "welcomeFile": "/dashboard/webapp/index.html",
     "authenticationMethod": "route",
     "routes": [
         {
@@ -19,6 +19,11 @@
         },
         {
             "source": "^/trips/(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^/dashboard/(.*)$",
             "destination": "srv-api",
             "authenticationType": "xsuaa"
         },

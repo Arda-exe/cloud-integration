@@ -9,6 +9,26 @@ service TripsService @(path: '/trips') {
         '' as personUserName : String
     };
 
+    @readonly @cds.persistence.skip entity PlanItems {
+        key PlanItemId     : Integer;
+        key personUserName : String(100);
+        key tripId         : Integer;
+        ConfirmationCode   : String;
+        StartsAt           : DateTime;
+        EndsAt             : DateTime;
+        Duration           : String;
+        FlightNumber       : String;
+        SeatNumber         : String;
+        fromIata           : String;
+        fromName           : String;
+        fromCity           : String;
+        toIata             : String;
+        toName             : String;
+        toCity             : String;
+        airlineCode        : String;
+        airlineName        : String;
+    };
+
     @restrict: [
         { grant: ['READ'],                                to: 'TeamLead' },
         { grant: ['READ'],                                to: 'HR' },

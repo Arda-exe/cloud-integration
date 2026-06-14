@@ -2,6 +2,7 @@
   "name": "primepath-travel",
   "version": "1.0.0",
   "dependencies": {
+    "@cap-js/hana": "^1",
     "@sap-cloud-sdk/connectivity": "^4",
     "@sap-cloud-sdk/http-client": "^4",
     "@sap-cloud-sdk/resilience": "^4",
@@ -21,18 +22,9 @@
       "auth": {
         "kind": "mocked",
         "users": {
-          "coordinator": {
-            "password": "test",
-            "roles": [ "TravelCoordinator" ]
-          },
-          "teamlead": {
-            "password": "test",
-            "roles": [ "TeamLead" ]
-          },
-          "hr": {
-            "password": "test",
-            "roles": [ "HR" ]
-          }
+          "coordinator": { "password": "test", "roles": ["TravelCoordinator"] },
+          "teamlead": { "password": "test", "roles": ["TeamLead"] },
+          "hr": { "password": "test", "roles": ["HR"] }
         }
       },
       "TripPin": {
@@ -43,7 +35,10 @@
         }
       },
       "[production]": {
-        "auth": "xsuaa"
+        "auth": "xsuaa",
+        "db": {
+          "kind": "hana"
+        }
       }
     }
   }

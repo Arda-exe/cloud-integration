@@ -1,10 +1,9 @@
 _schema-version: "3.1"
 ID: primepath-travel
 description: PrimePath Travel Dashboard
-version: 1.2.0
+version: 1.3.0
 
 modules:
-  # CAP Backend
   - name: primepath-travel-srv
     type: nodejs
     path: .
@@ -21,8 +20,8 @@ modules:
     requires:
       - name: primepath-xsuaa
       - name: primepath-destination
+      - name: primepath-db
 
-  # Application Router
   - name: primepath-travel-approuter
     type: approuter.nodejs
     path: approuter
@@ -38,7 +37,21 @@ modules:
           forwardAuthToken: true
       - name: primepath-xsuaa
 
+  - name: primepath-travel-db-deployer
+    type: hdb
+    path: db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: primepath-db
+
 resources:
+  - name: primepath-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+
   - name: primepath-xsuaa
     type: org.cloudfoundry.managed-service
     parameters:

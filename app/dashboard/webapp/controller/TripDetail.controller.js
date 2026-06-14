@@ -20,13 +20,16 @@ sap.ui.define([
 
         onInit: function () {
             this._oDateFormat = DateFormat.getDateInstance({ style: "medium" });
+            this._oDateTimeFormat = DateFormat.getDateTimeInstance({ style: "medium" });
             this.getView().setModel(new JSONModel({
                 busy: false,
                 personName: "",
                 periodText: "",
                 trip: {},
                 tags: [],
-                ext: {}
+                ext: {},
+                flights: [],
+                flightsBusy: false
             }), "trip");
             this.getOwnerComponent().getRouter().getRoute("trip")
                 .attachPatternMatched(this.onPatternMatched, this);
@@ -49,7 +52,9 @@ sap.ui.define([
                 periodText: "",
                 trip: {},
                 tags: [],
-                ext: {}
+                ext: {},
+                flights: [],
+                flightsBusy: true
             });
 
             // 1) Trip ophalen via PersonTrips (zelfde patroon als EmployeeDetail) en
@@ -67,9 +72,18 @@ sap.ui.define([
                 new Filter("tripId", FilterOperator.EQ, this._iTripId)
             ], { $select: "tripId,personUserName,approvalStatus,company,team,notes" });
 
+            // 3) Vluchten (PlanItems) — beide filterdelen zijn verplicht en de veldnamen
+            //    moeten exact 'personUserName' en (numeriek) 'tripId' zijn, anders matcht de
+            //    backend-regex niet en komt er [] terug.
+            var oFlightsBinding = oTripsModel.bindList("/PlanItems", undefined, undefined, [
+                new Filter("personUserName", FilterOperator.EQ, this._sUserName),
+                new Filter("tripId", FilterOperator.EQ, this._iTripId)
+            ], { $select: "PlanItemId,FlightNumber,SeatNumber,StartsAt,EndsAt,fromIata,fromName,toIata,toName,airlineCode,airlineName" });
+
             Promise.all([
                 oTripsBinding.requestContexts(0, 100),
-                oExtBinding.requestContexts(0, 1)
+                oExtBinding.requestContexts(0, 1),
+                oFlightsBinding.requestContexts(0, 200)
             ]).then(function (aResults) {
                 var oTrip = aResults[0]
                     .map(function (oContext) { return oContext.getObject(); })
@@ -77,18 +91,44 @@ sap.ui.define([
 
                 if (!oTrip) {
                     oModel.setProperty("/busy", false);
+                    oModel.setProperty("/flightsBusy", false);
                     MessageToast.show(that._bundle().getText("tripLoadError"));
                     return;
                 }
 
                 var aExt = aResults[1];
                 that._applyTrip(oTrip, aExt.length ? aExt[0].getObject() : null);
+                that._applyFlights(aResults[2]);
                 oModel.setProperty("/busy", false);
             }).catch(function (oError) {
                 Log.error("Loading trip detail failed", oError);
                 oModel.setProperty("/busy", false);
+                oModel.setProperty("/flightsBusy", false);
                 MessageToast.show(that._bundle().getText("tripLoadError"));
             });
+        },
+
+        _applyFlights: function (aContexts) {
+            var that = this;
+            var sNone = this._bundle().getText("valueNone");
+            var aFlights = aContexts.map(function (oContext) {
+                var o = oContext.getObject();
+                return {
+                    flightId: o.PlanItemId,
+                    flightTitle: (o.airlineName ? o.airlineName + " " : "") + (o.FlightNumber || ""),
+                    airlineName: o.airlineName || "",
+                    seat: o.SeatNumber || sNone,
+                    departure: o.StartsAt ? that._oDateTimeFormat.format(new Date(o.StartsAt)) : "",
+                    arrival: o.EndsAt ? that._oDateTimeFormat.format(new Date(o.EndsAt)) : "",
+                    fromIata: o.fromIata,
+                    fromName: o.fromName,
+                    toIata: o.toIata,
+                    toName: o.toName
+                };
+            });
+            var oModel = this.getView().getModel("trip");
+            oModel.setProperty("/flights", aFlights);
+            oModel.setProperty("/flightsBusy", false);
         },
 
         _applyTrip: function (oTrip, oExt) {

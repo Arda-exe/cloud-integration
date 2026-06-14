@@ -67,11 +67,49 @@
 
             <Panel headerText="{i18n>flightsTitle}" class="sapUiSmallMarginBeginEnd sapUiSmallMarginBottom">
                 <content>
-                    <MessageStrip
-                        text="{i18n>flightsComingSoon}"
-                        type="Information"
-                        showIcon="true"
-                        class="sapUiSmallMargin" />
+                    <Table
+                        id="flightsTable"
+                        items="{trip>/flights}"
+                        busy="{trip>/flightsBusy}"
+                        busyIndicatorDelay="200"
+                        noDataText="{i18n>flightsNoData}"
+                        sticky="ColumnHeaders">
+
+                        <columns>
+                            <Column>
+                                <Text text="{i18n>colFlight}" />
+                            </Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true">
+                                <Text text="{i18n>colFrom}" />
+                            </Column>
+                            <Column minScreenWidth="Tablet" demandPopin="true">
+                                <Text text="{i18n>colTo}" />
+                            </Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true">
+                                <Text text="{i18n>colDeparture}" />
+                            </Column>
+                            <Column minScreenWidth="Desktop" demandPopin="true">
+                                <Text text="{i18n>colArrival}" />
+                            </Column>
+                            <Column width="5rem" hAlign="End">
+                                <Text text="{i18n>colSeat}" />
+                            </Column>
+                        </columns>
+
+                        <items>
+                            <ColumnListItem vAlign="Middle">
+                                <cells>
+                                    <ObjectIdentifier title="{trip>flightTitle}" text="{trip>airlineName}" />
+                                    <Text text="{trip>fromName} ({trip>fromIata})" />
+                                    <Text text="{trip>toName} ({trip>toIata})" />
+                                    <Text text="{trip>departure}" />
+                                    <Text text="{trip>arrival}" />
+                                    <Text text="{trip>seat}" />
+                                </cells>
+                            </ColumnListItem>
+                        </items>
+
+                    </Table>
                 </content>
             </Panel>
         </content>

@@ -13,6 +13,14 @@ modules:
       memory: 256M
     build-parameters:
       builder: npm
+      ignore:
+        - mta_archives/
+        - .git/
+        - app/
+        - .vscode/
+        - "*.mtar"
+        - "Makefile_*"
+        - ".primepath-travel_mta_build_tmp/"
     provides:
       - name: srv-api
         properties:

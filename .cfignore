@@ -1,0 +1,6 @@
+mta_archives/
+.git/
+.vscode/
+app/
+*.mtar
+Makefile_*

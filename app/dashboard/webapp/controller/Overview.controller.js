@@ -50,7 +50,7 @@ sap.ui.define([
                 // trips zijn alleen per persoon opvraagbaar (containment in TripPin)
                 return Promise.all(aPeople.map(function (oPerson) {
                     return fnList("trips", "/PersonTrips",
-                        [new Filter("Name", FilterOperator.EQ, oPerson.UserName)])
+                        [new Filter("personUserName", FilterOperator.EQ, oPerson.UserName)])
                         .then(function (aTrips) {
                             return { person: oPerson, trips: aTrips };
                         });

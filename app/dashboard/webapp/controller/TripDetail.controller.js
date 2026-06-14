@@ -56,7 +56,7 @@ sap.ui.define([
             //    client-side de juiste TripId kiezen — een keyed trip-read geeft de
             //    verkeerde rij terug (backend issue 2).
             var oTripsBinding = oTripsModel.bindList("/PersonTrips", undefined, undefined,
-                [new Filter("Name", FilterOperator.EQ, this._sUserName)]);
+                [new Filter("personUserName", FilterOperator.EQ, this._sUserName)]);
 
             // 2) Extension (approval/company/team/notes) los ophalen met een filter op de
             //    samengestelde sleutel; geen keyed read → geen 404-ruis als er (nog) geen

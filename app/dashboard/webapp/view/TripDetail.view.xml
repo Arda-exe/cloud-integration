@@ -2,6 +2,9 @@
     controllerName="primepath.dashboard.controller.TripDetail"
     displayBlock="true"
     xmlns:mvc="sap.ui.core.mvc"
+    xmlns:f="sap.f"
+    xmlns:card="sap.f.cards"
+    xmlns:core="sap.ui.core"
     xmlns="sap.m">
 
     <Page
@@ -24,20 +27,97 @@
                 </attributes>
             </ObjectHeader>
 
+            <FlexBox wrap="Wrap" alignItems="Stretch" class="sapUiSmallMarginTop">
+            <Panel headerText="{i18n>routeTitle}" class="sapUiSmallMarginBeginEnd" visible="{trip>/route/has}">
+                <layoutData>
+                    <FlexItemData growFactor="2" baseSize="42rem" />
+                </layoutData>
+                <content>
+                    <VBox class="sapUiSmallMargin">
+                        <HBox justifyContent="Center" alignItems="Center" class="sapUiSmallMarginBottom">
+                            <VBox alignItems="Center">
+                                <Title text="{trip>/route/fromIata}" level="H2" />
+                                <Text text="{trip>/route/fromName}" textAlign="Center" />
+                            </VBox>
+                            <core:Icon src="sap-icon://flight" size="2rem" class="sapUiLargeMarginBegin sapUiLargeMarginEnd" />
+                            <VBox alignItems="Center">
+                                <Title text="{trip>/route/toIata}" level="H2" />
+                                <Text text="{trip>/route/toName}" textAlign="Center" />
+                            </VBox>
+                        </HBox>
+
+                        <FlexBox wrap="Wrap" justifyContent="Center">
+                            <f:Card width="20rem" class="sapUiSmallMargin">
+                                <f:header>
+                                    <card:Header title="{trip>/route/fromName}" subtitle="{i18n>routeDeparture}" iconSrc="sap-icon://journey-depart" />
+                                </f:header>
+                                <f:content>
+                                    <VBox class="sapUiSmallMargin">
+                                        <HBox class="sapUiTinyMarginBottom">
+                                            <Label text="{i18n>lblCity}" width="9rem" />
+                                            <Text text="{trip>/route/fromCity}" />
+                                        </HBox>
+                                        <HBox class="sapUiTinyMarginBottom">
+                                            <Label text="{i18n>lblCoordinates}" width="9rem" />
+                                            <Text text="{trip>/route/fromCoords}" />
+                                        </HBox>
+                                        <HBox>
+                                            <Label text="{i18n>lblTripsViaAirport}" width="9rem" />
+                                            <Text text="{trip>/route/fromTrips}" />
+                                        </HBox>
+                                    </VBox>
+                                </f:content>
+                            </f:Card>
+
+                            <f:Card width="20rem" class="sapUiSmallMargin">
+                                <f:header>
+                                    <card:Header title="{trip>/route/toName}" subtitle="{i18n>routeArrival}" iconSrc="sap-icon://journey-arrive" />
+                                </f:header>
+                                <f:content>
+                                    <VBox class="sapUiSmallMargin">
+                                        <HBox class="sapUiTinyMarginBottom">
+                                            <Label text="{i18n>lblCity}" width="9rem" />
+                                            <Text text="{trip>/route/toCity}" />
+                                        </HBox>
+                                        <HBox class="sapUiTinyMarginBottom">
+                                            <Label text="{i18n>lblCoordinates}" width="9rem" />
+                                            <Text text="{trip>/route/toCoords}" />
+                                        </HBox>
+                                        <HBox>
+                                            <Label text="{i18n>lblTripsViaAirport}" width="9rem" />
+                                            <Text text="{trip>/route/toTrips}" />
+                                        </HBox>
+                                    </VBox>
+                                </f:content>
+                            </f:Card>
+                        </FlexBox>
+                    </VBox>
+                </content>
+            </Panel>
+
+            <Panel headerText="{i18n>coTravellersTitle}" class="sapUiSmallMarginBeginEnd"
+                visible="{= ${trip>/coTravellers}.length > 0 }">
+                <layoutData>
+                    <FlexItemData growFactor="1" baseSize="20rem" />
+                </layoutData>
+                <content>
+                    <List items="{trip>/coTravellers}">
+                        <StandardListItem
+                            title="{trip>name}"
+                            description="{trip>userName}"
+                            icon="sap-icon://employee"
+                            iconDensityAware="false"
+                            type="Navigation"
+                            press=".onCoTravellerPress" />
+                    </List>
+                </content>
+            </Panel>
+            </FlexBox>
+
             <Panel headerText="{i18n>tripInfoTitle}" class="sapUiSmallMarginBeginEnd sapUiSmallMarginTop">
                 <content>
                     <VBox class="sapUiSmallMargin">
                         <Text text="{trip>/trip/Description}" />
-                        <HBox alignItems="Center" wrap="Wrap" class="sapUiSmallMarginTop">
-                            <Label text="{i18n>lblTags}" class="sapUiTinyMarginEnd" />
-                            <HBox items="{trip>/tags}" wrap="Wrap">
-                                <ObjectStatus
-                                    text="{trip>name}"
-                                    state="Information"
-                                    inverted="true"
-                                    class="sapUiTinyMarginEnd" />
-                            </HBox>
-                        </HBox>
                     </VBox>
                 </content>
             </Panel>
@@ -45,21 +125,9 @@
             <Panel headerText="{i18n>approvalTitle}" class="sapUiSmallMarginBeginEnd">
                 <content>
                     <VBox class="sapUiSmallMargin">
-                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                        <HBox alignItems="Center">
                             <Label text="{i18n>lblApprovalStatus}" width="7rem" />
                             <ObjectStatus text="{trip>/ext/statusText}" state="{trip>/ext/statusState}" />
-                        </HBox>
-                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
-                            <Label text="{i18n>lblCompany}" width="7rem" />
-                            <Text text="{trip>/ext/company}" />
-                        </HBox>
-                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
-                            <Label text="{i18n>lblTeam}" width="7rem" />
-                            <Text text="{trip>/ext/team}" />
-                        </HBox>
-                        <HBox class="sapUiTinyMarginBottom">
-                            <Label text="{i18n>lblNotes}" width="7rem" />
-                            <Text text="{trip>/ext/notes}" />
                         </HBox>
                     </VBox>
                 </content>
@@ -121,7 +189,7 @@
                     text="{i18n>btnSubmit}"
                     type="Emphasized"
                     enabled="{= !${trip>/ext/exists} }"
-                    press=".onOpenApprovalForm" />
+                    press=".onSubmitApproval" />
                 <Button
                     text="{i18n>btnApprove}"
                     type="Accept"

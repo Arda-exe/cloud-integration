@@ -1,17 +1,18 @@
 sap.ui.define([
-    "sap/ui/core/mvc/Controller",
+    "primepath/dashboard/controller/BaseController",
     "sap/ui/core/Fragment",
     "sap/ui/model/json/JSONModel",
-    "sap/m/MessageToast"
-], function (Controller, Fragment, JSONModel, MessageToast) {
+    "sap/m/MessageToast",
+    "primepath/dashboard/util/searchFilter"
+], function (BaseController, Fragment, JSONModel, MessageToast, searchFilter) {
     "use strict";
 
-    return Controller.extend("primepath.dashboard.controller.App", {
+    return BaseController.extend("primepath.dashboard.controller.App", {
 
         onInit: function () {
             // route names en tab keys zijn identiek (overview/employees/airports),
             // dus de route-naam kan rechtstreeks als selectedKey dienen
-            this.getOwnerComponent().getRouter()
+            this.getRouter()
                 .attachRouteMatched(this.onRouteMatched, this);
         },
 
@@ -23,7 +24,7 @@ sap.ui.define([
         },
 
         onTabSelect: function (oEvent) {
-            this.getOwnerComponent().getRouter()
+            this.getRouter()
                 .navTo(oEvent.getParameter("key"));
         },
 
@@ -49,13 +50,8 @@ sap.ui.define([
                 return;
             }
             this._ensureSearchData().then(function (oData) {
-                var fnMatch = function (aFields) {
-                    return aFields.some(function (sField) {
-                        return (sField || "").toLowerCase().indexOf(sQuery) !== -1;
-                    });
-                };
-                var aEmp = oData.people.filter(function (p) {
-                    return fnMatch([p.FirstName, p.LastName, p.UserName]);
+                var aEmp = searchFilter.filter(oData.people, sQuery, function (p) {
+                    return [p.FirstName, p.LastName, p.UserName];
                 }).slice(0, 8).map(function (p) {
                     return {
                         type: "employee",
@@ -65,9 +61,9 @@ sap.ui.define([
                         icon: "sap-icon://employee"
                     };
                 });
-                var aApt = oData.airports.filter(function (a) {
-                    return fnMatch([a.Name, a.IataCode,
-                        a.Location && a.Location.City && a.Location.City.Name]);
+                var aApt = searchFilter.filter(oData.airports, sQuery, function (a) {
+                    return [a.Name, a.IataCode,
+                        a.Location && a.Location.City && a.Location.City.Name];
                 }).slice(0, 8).map(function (a) {
                     return {
                         type: "airport",
@@ -77,8 +73,8 @@ sap.ui.define([
                         icon: "sap-icon://flight"
                     };
                 });
-                var aAln = oData.airlines.filter(function (a) {
-                    return fnMatch([a.Name, a.AirlineCode]);
+                var aAln = searchFilter.filter(oData.airlines, sQuery, function (a) {
+                    return [a.Name, a.AirlineCode];
                 }).slice(0, 8).map(function (a) {
                     return {
                         type: "airline",
@@ -90,7 +86,7 @@ sap.ui.define([
                 });
 
                 if (!aEmp.length && !aApt.length && !aAln.length) {
-                    MessageToast.show(that._bundle().getText("globalSearchNoResults"));
+                    MessageToast.show(that.getResourceBundle().getText("globalSearchNoResults"));
                     return;
                 }
 
@@ -126,7 +122,7 @@ sap.ui.define([
 
         onSearchItemPress: function (oEvent) {
             var oItem = oEvent.getSource().getBindingContext("search").getObject();
-            var oRouter = this.getOwnerComponent().getRouter();
+            var oRouter = this.getRouter();
             if (this._oSearchDialog) {
                 this._oSearchDialog.close();
             }
@@ -136,7 +132,7 @@ sap.ui.define([
                 oRouter.navTo("airportFocus", { iata: oItem.key });
             } else {
                 // geen airline-detailpagina → informatief
-                MessageToast.show(this._bundle().getText("airlineInfo", [oItem.title, oItem.key]));
+                MessageToast.show(this.getResourceBundle().getText("airlineInfo", [oItem.title, oItem.key]));
             }
         },
 
@@ -151,10 +147,6 @@ sap.ui.define([
                 this._oSearchDialog.destroy();
                 this._oSearchDialog = null;
             }
-        },
-
-        _bundle: function () {
-            return this.getOwnerComponent().getModel("i18n").getResourceBundle();
         }
 
     });

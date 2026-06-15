@@ -4,34 +4,60 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns:f="sap.f"
     xmlns:card="sap.f.cards"
+    xmlns:mc="sap.suite.ui.microchart"
     xmlns="sap.m">
 
     <Page showHeader="false">
         <content>
             <VBox class="sapUiMediumMargin" busy="{view>/busy}" busyIndicatorDelay="100">
 
+                <OverflowToolbar class="sapUiSmallMarginBottom">
+                    <Title text="{i18n>overviewPeriodTitle}" />
+                    <ToolbarSpacer />
+                    <DateRangeSelection
+                        id="overviewPeriod"
+                        width="18rem"
+                        placeholder="{i18n>overviewPeriodPlaceholder}"
+                        change=".onPeriodChange" />
+                </OverflowToolbar>
+
                 <FlexBox wrap="Wrap">
-                    <GenericTile header="{i18n>kpiEmployees}" class="sapUiTinyMargin">
+                    <GenericTile header="{i18n>kpiEmployees}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
                         <TileContent>
                             <NumericContent value="{view>/kpi/employees}" icon="sap-icon://employee" withMargin="false" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile header="{i18n>kpiTrips}" class="sapUiTinyMargin">
+                    <GenericTile header="{i18n>kpiTrips}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
                         <TileContent>
                             <NumericContent value="{view>/kpi/trips}" icon="sap-icon://travel-itinerary" withMargin="false" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile header="{i18n>kpiBudget}" class="sapUiTinyMargin">
+                    <GenericTile header="{i18n>kpiBudget}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
                         <TileContent unit="USD">
                             <NumericContent value="{view>/kpi/budget}" scale="{view>/kpi/budgetScale}" icon="sap-icon://money-bills" withMargin="false" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile header="{i18n>kpiAirports}" class="sapUiTinyMargin">
+                    <GenericTile header="{i18n>kpiAirports}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
                         <TileContent>
                             <NumericContent value="{view>/kpi/airports}" icon="sap-icon://flight" withMargin="false" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile header="{i18n>kpiAirlines}" class="sapUiTinyMargin">
+                    <GenericTile header="{i18n>kpiAirlines}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
                         <TileContent>
                             <NumericContent value="{view>/kpi/airlines}" icon="sap-icon://globe" withMargin="false" />
                         </TileContent>
@@ -39,7 +65,10 @@
                 </FlexBox>
 
                 <FlexBox wrap="Wrap">
-                    <f:Card width="22rem" class="sapUiSmallMargin">
+                    <f:Card class="sapUiSmallMargin">
+                        <f:layoutData>
+                            <FlexItemData growFactor="1" baseSize="22rem" />
+                        </f:layoutData>
                         <f:header>
                             <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
                         </f:header>
@@ -54,44 +83,49 @@
                         </f:content>
                     </f:Card>
 
-                    <f:Card width="22rem" class="sapUiSmallMargin">
+                    <f:Card height="20rem" class="sapUiSmallMargin"
+                        busy="{view>/flightsBusy}" busyIndicatorDelay="100">
+                        <f:layoutData>
+                            <FlexItemData growFactor="1" baseSize="22rem" />
+                        </f:layoutData>
                         <f:header>
                             <card:Header title="{i18n>topAirlinesTitle}" iconSrc="sap-icon://flight" />
                         </f:header>
                         <f:content>
-                            <List
-                                items="{view>/topAirlines}"
-                                showSeparators="Inner"
-                                busy="{view>/flightsBusy}"
-                                busyIndicatorDelay="100"
-                                noDataText="{i18n>topAirlinesNoData}">
-                                <StandardListItem
+                            <mc:ComparisonMicroChart
+                                size="Responsive"
+                                width="100%"
+                                class="sapUiSmallMargin"
+                                data="{view>/topAirlines}">
+                                <mc:ComparisonMicroChartData
                                     title="{view>name}"
-                                    info="{view>info}"
-                                    icon="sap-icon://flight"
-                                    iconDensityAware="false" />
-                            </List>
+                                    value="{view>count}"
+                                    displayValue="{view>info}"
+                                    color="Good" />
+                            </mc:ComparisonMicroChart>
                         </f:content>
                     </f:Card>
 
-                    <f:Card width="22rem" class="sapUiSmallMargin">
+                    <f:Card height="20rem" class="sapUiSmallMargin"
+                        busy="{view>/flightsBusy}" busyIndicatorDelay="100">
+                        <f:layoutData>
+                            <FlexItemData growFactor="1" baseSize="22rem" />
+                        </f:layoutData>
                         <f:header>
                             <card:Header title="{i18n>topRoutesTitle}" iconSrc="sap-icon://journey-arrive" />
                         </f:header>
                         <f:content>
-                            <List
-                                items="{view>/topRoutes}"
-                                showSeparators="Inner"
-                                busy="{view>/flightsBusy}"
-                                busyIndicatorDelay="100"
-                                noDataText="{i18n>topRoutesNoData}">
-                                <StandardListItem
+                            <mc:ComparisonMicroChart
+                                size="Responsive"
+                                width="100%"
+                                class="sapUiSmallMargin"
+                                data="{view>/topRoutes}">
+                                <mc:ComparisonMicroChartData
                                     title="{view>name}"
-                                    description="{view>sub}"
-                                    info="{view>info}"
-                                    icon="sap-icon://journey-arrive"
-                                    iconDensityAware="false" />
-                            </List>
+                                    value="{view>count}"
+                                    displayValue="{view>info}"
+                                    color="Neutral" />
+                            </mc:ComparisonMicroChart>
                         </f:content>
                     </f:Card>
                 </FlexBox>

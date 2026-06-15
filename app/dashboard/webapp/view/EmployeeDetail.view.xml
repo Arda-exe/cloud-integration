@@ -6,49 +6,55 @@
 
     <Page
         id="employeePage"
-        title="Employee Detail"
+        title="{i18n>employeeDetailTitle}"
         showNavButton="true"
         navButtonPress=".onNavBack">
 
         <content>
-            <ObjectHeader
-                title="{people>FirstName} {people>LastName}"
-                intro="{people>UserName}">
-                <attributes>
-                    <ObjectAttribute
-                        title="Email"
-                        text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" />
-                    <ObjectAttribute
-                        title="{i18n>lblCity}"
-                        text="{path: 'people>AddressInfo', targetType: 'any', formatter: '.formatCity'}" />
-                </attributes>
-            </ObjectHeader>
+            <VBox class="sapUiMediumMarginBegin sapUiMediumMarginTop">
+                <Title text="{people>FirstName} {people>LastName}" titleStyle="H1" wrapping="true" />
+                <HBox wrap="Wrap" alignItems="Center" class="sapUiSmallMarginTop">
+                    <Label text="{i18n>lblEmail}" class="sapUiTinyMarginEnd" />
+                    <Text text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" class="sapUiMediumMarginEnd" />
+                    <Label text="{i18n>lblCity}" class="sapUiTinyMarginEnd" />
+                    <Text text="{path: 'people>AddressInfo', targetType: 'any', formatter: '.formatCity'}" />
+                </HBox>
+            </VBox>
 
-            <Panel headerText="{i18n>locationTitle}" class="sapUiSmallMargin">
-                <content>
-                    <HBox alignItems="Center" wrap="Wrap" class="sapUiTinyMargin">
-                        <DatePicker
-                            id="locationDate"
-                            width="12rem"
-                            placeholder="{i18n>locationDatePlaceholder}"
-                            change=".onLocationDateChange"
-                            class="sapUiSmallMarginEnd" />
-                        <Text text="{detail>/locationText}" />
-                    </HBox>
-                </content>
-            </Panel>
+            <FlexBox wrap="Wrap" class="sapUiSmallMarginBegin sapUiSmallMarginTop">
+                <GenericTile header="{i18n>countTotalTrips}" class="sapUiTinyMargin">
+                    <TileContent>
+                        <NumericContent value="{detail>/counts/total}" icon="sap-icon://travel-itinerary" withMargin="false" />
+                    </TileContent>
+                </GenericTile>
+                <GenericTile header="{i18n>countUpcoming}" class="sapUiTinyMargin">
+                    <TileContent>
+                        <NumericContent value="{detail>/counts/upcoming}" icon="sap-icon://appointment-2" withMargin="false" />
+                    </TileContent>
+                </GenericTile>
+                <GenericTile header="{i18n>countCompleted}" class="sapUiTinyMargin">
+                    <TileContent>
+                        <NumericContent value="{detail>/counts/completed}" icon="sap-icon://complete" withMargin="false" />
+                    </TileContent>
+                </GenericTile>
+            </FlexBox>
 
             <Table
                 id="tripsTable"
                 items="{detail>/trips}"
                 busy="{detail>/busy}"
                 busyIndicatorDelay="200"
-                noDataText="{i18n>tripsNoData}">
+                noDataText="{i18n>tripsNoData}"
+                class="sapUiSmallMarginTop sapUiMediumMarginBottom">
 
                 <headerToolbar>
                     <OverflowToolbar>
                         <Title text="{i18n>tripsTitle}" />
                         <ToolbarSpacer />
+                        <Button
+                            icon="sap-icon://map"
+                            text="{i18n>btnLocateOnDate}"
+                            press=".onOpenLocation" />
                         <DateRangeSelection
                             id="tripsRange"
                             width="18rem"

@@ -27,6 +27,18 @@ module.exports = cds.service.impl(async function () {
             return json.value ?? json
         }
 
-        return fetchAllPages(`${BASE}/People`)
+        // TripPin is een publieke, schrijfbare demo-service en raakt vervuild door test-
+        // accounts van derden (JdbcUser-/JdbcName-, soms met DUPLICAAT-keys). Duplicaat-keys
+        // laten het OData V4-model de hele /People-collectie afwijzen ("data laadt niet"),
+        // dus filteren we de junk en ontdubbelen we defensief op UserName.
+        const aAll = await fetchAllPages(`${BASE}/People`)
+        const seen = {}
+        return aAll.filter((p) => {
+            if (!p || !p.UserName || /^Jdbc/i.test(p.UserName) || seen[p.UserName]) {
+                return false
+            }
+            seen[p.UserName] = true
+            return true
+        })
     })
 })

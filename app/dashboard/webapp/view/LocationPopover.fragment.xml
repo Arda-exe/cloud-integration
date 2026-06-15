@@ -1,0 +1,19 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Popover
+        title="{i18n>locationTitle}"
+        placement="Auto"
+        contentWidth="22rem">
+        <VBox class="sapUiContentPadding">
+            <DatePicker
+                id="locationDate"
+                width="100%"
+                placeholder="{i18n>locationDatePlaceholder}"
+                change=".onLocationDateChange" />
+            <Text text="{detail>/locationText}" class="sapUiSmallMarginTop" />
+        </VBox>
+    </Popover>
+
+</core:FragmentDefinition>

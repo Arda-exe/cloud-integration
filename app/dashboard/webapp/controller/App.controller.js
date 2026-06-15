@@ -29,26 +29,17 @@ sap.ui.define([
 
         // ---- Global search (feature 7) -------------------------------------
 
-        // People/Airports/Airlines zijn klein en sessie-statisch → één keer cachen
+        // Hergebruikt de app-brede Component-cache → de zoekfunctie deelt de datasets
+        // met Overview/Employees/Airports (geen extra requests).
         _ensureSearchData: function () {
-            if (this._pSearchData) {
-                return this._pSearchData;
-            }
             var oComponent = this.getOwnerComponent();
-            var fnList = function (sModel, sPath) {
-                return oComponent.getModel(sModel).bindList(sPath).requestContexts(0, 500)
-                    .then(function (aContexts) {
-                        return aContexts.map(function (oContext) { return oContext.getObject(); });
-                    });
-            };
-            this._pSearchData = Promise.all([
-                fnList("people", "/People"),
-                fnList("airports", "/Airports"),
-                fnList("airlines", "/Airlines")
+            return Promise.all([
+                oComponent.getCachedList("people", "/People"),
+                oComponent.getCachedList("airports", "/Airports"),
+                oComponent.getCachedList("airlines", "/Airlines")
             ]).then(function (aResults) {
                 return { people: aResults[0], airports: aResults[1], airlines: aResults[2] };
             });
-            return this._pSearchData;
         },
 
         onGlobalSearch: function (oEvent) {

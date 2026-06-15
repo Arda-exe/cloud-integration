@@ -45,7 +45,8 @@ sap.ui.define([
         _load: function () {
             var that = this;
             var oModel = this.getView().getModel("trip");
-            var oTripsModel = this.getOwnerComponent().getModel("trips");
+            var oComponent = this.getOwnerComponent();
+            var oTripsModel = oComponent.getModel("trips");
             oModel.setData({
                 busy: true,
                 personName: this._sUserName,
@@ -57,37 +58,24 @@ sap.ui.define([
                 flightsBusy: true
             });
 
-            // 1) Trip ophalen via PersonTrips (zelfde patroon als EmployeeDetail) en
-            //    client-side de juiste TripId kiezen — een keyed trip-read geeft de
-            //    verkeerde rij terug (backend issue 2).
-            var oTripsBinding = oTripsModel.bindList("/PersonTrips", undefined, undefined,
-                [new Filter("personUserName", FilterOperator.EQ, this._sUserName)]);
-
-            // 2) Extension (approval/company/team/notes) los ophalen met een filter op de
-            //    samengestelde sleutel; geen keyed read → geen 404-ruis als er (nog) geen
-            //    rij is. Expliciete $select want autoExpandSelect ziet geen OData-bindings
-            //    (we lezen via getObject() naar een JSON-model).
+            // Trips en vluchten uit de app-brede cache (gedeeld met Overview /
+            // EmployeeDetail); de juiste trip wordt client-side op TripId gekozen.
+            // TripExtensions is schrijfbaar → NIET cachen, altijd live lezen met een
+            // filter op de samengestelde sleutel (geen keyed read → geen 404-ruis als er
+            // nog geen rij is), zodat approve/reject/submit meteen zichtbaar is na _load().
             var oExtBinding = oTripsModel.bindList("/TripExtensions", undefined, undefined, [
                 new Filter("personUserName", FilterOperator.EQ, this._sUserName),
                 new Filter("tripId", FilterOperator.EQ, this._iTripId)
             ], { $select: "tripId,personUserName,approvalStatus,company,team,notes" });
 
-            // 3) Vluchten (PlanItems) — beide filterdelen zijn verplicht en de veldnamen
-            //    moeten exact 'personUserName' en (numeriek) 'tripId' zijn, anders matcht de
-            //    backend-regex niet en komt er [] terug.
-            var oFlightsBinding = oTripsModel.bindList("/PlanItems", undefined, undefined, [
-                new Filter("personUserName", FilterOperator.EQ, this._sUserName),
-                new Filter("tripId", FilterOperator.EQ, this._iTripId)
-            ], { $select: "PlanItemId,FlightNumber,SeatNumber,StartsAt,EndsAt,fromIata,fromName,toIata,toName,airlineCode,airlineName" });
-
             Promise.all([
-                oTripsBinding.requestContexts(0, 100),
+                oComponent.getCachedTrips(this._sUserName),
                 oExtBinding.requestContexts(0, 1),
-                oFlightsBinding.requestContexts(0, 200)
+                oComponent.getCachedFlights(this._sUserName, this._iTripId)
             ]).then(function (aResults) {
-                var oTrip = aResults[0]
-                    .map(function (oContext) { return oContext.getObject(); })
-                    .find(function (oCandidate) { return oCandidate.TripId === that._iTripId; });
+                var oTrip = aResults[0].find(function (oCandidate) {
+                    return oCandidate.TripId === that._iTripId;
+                });
 
                 if (!oTrip) {
                     oModel.setProperty("/busy", false);
@@ -108,11 +96,10 @@ sap.ui.define([
             });
         },
 
-        _applyFlights: function (aContexts) {
+        _applyFlights: function (aFlightObjects) {
             var that = this;
             var sNone = this._bundle().getText("valueNone");
-            var aFlights = aContexts.map(function (oContext) {
-                var o = oContext.getObject();
+            var aFlights = aFlightObjects.map(function (o) {
                 return {
                     flightId: o.PlanItemId,
                     flightTitle: (o.airlineName ? o.airlineName + " " : "") + (o.FlightNumber || ""),

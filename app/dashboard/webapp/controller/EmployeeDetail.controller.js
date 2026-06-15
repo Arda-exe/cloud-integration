@@ -1,12 +1,10 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
     "sap/ui/core/format/DateFormat",
     "sap/m/MessageToast",
     "sap/base/Log"
-], function (Controller, JSONModel, Filter, FilterOperator, DateFormat, MessageToast, Log) {
+], function (Controller, JSONModel, DateFormat, MessageToast, Log) {
     "use strict";
 
     var MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -46,29 +44,18 @@ sap.ui.define([
         _loadTrips: function (sUserName) {
             var that = this;
             var oDetail = this.getView().getModel("detail");
-            var oTripsModel = this.getOwnerComponent().getModel("trips");
             oDetail.setProperty("/busy", true);
 
-            // trips-service.js haalt de username uit de filterconditie met een regex
-            // op "personUserName eq '...'" (CLAUDE.md backend issue 4). Het veld MOET
-            // dus personUserName heten, anders matcht de regex niet en geeft de backend
-            // [] terug. Wordt een echte server-side filter zodra de backend PersonTrips
-            // de projectie met personUserName vult.
-            var oBinding = oTripsModel.bindList("/PersonTrips", undefined, undefined,
-                [new Filter("personUserName", FilterOperator.EQ, sUserName)]);
-
-            oBinding.requestContexts(0, 100).then(function (aContexts) {
+            // trips uit de app-brede cache (gedeeld met Overview/TripDetail)
+            this.getOwnerComponent().getCachedTrips(sUserName).then(function (aTrips) {
                 if (that._sUserName !== sUserName) {
                     return; // intussen naar een andere persoon genavigeerd
                 }
-                var aTrips = aContexts.map(function (oContext) {
-                    return oContext.getObject();
-                });
-                // chronologisch; ISO-strings sorteren correct als tekst
-                aTrips.sort(function (a, b) {
+                // kopie vóór sort — gedeelde cache-array niet muteren; ISO-strings
+                // sorteren correct als tekst (chronologisch)
+                that._aAllTrips = aTrips.slice().sort(function (a, b) {
                     return a.StartsAt < b.StartsAt ? -1 : 1;
                 });
-                that._aAllTrips = aTrips;
                 that._applyDateRange();
                 oDetail.setProperty("/busy", false);
             }).catch(function (oError) {

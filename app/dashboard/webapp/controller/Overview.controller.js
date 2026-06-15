@@ -1,12 +1,10 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
     "sap/ui/core/format/NumberFormat",
     "sap/m/MessageToast",
     "sap/base/Log"
-], function (Controller, JSONModel, Filter, FilterOperator, NumberFormat, MessageToast, Log) {
+], function (Controller, JSONModel, NumberFormat, MessageToast, Log) {
     "use strict";
 
     return Controller.extend("primepath.dashboard.controller.Overview", {
@@ -29,34 +27,21 @@ sap.ui.define([
             var oViewModel = this.getView().getModel("view");
             var oBundle = oComponent.getModel("i18n").getResourceBundle();
 
-            var fnList = function (sModel, sPath, aFilters) {
-                return oComponent.getModel(sModel)
-                    .bindList(sPath, undefined, undefined, aFilters)
-                    .requestContexts(0, 200)
-                    .then(function (aContexts) {
-                        return aContexts.map(function (oContext) {
-                            return oContext.getObject();
-                        });
-                    });
-            };
-
             Promise.all([
-                fnList("people", "/People"),
-                fnList("airports", "/Airports"),
-                fnList("airlines", "/Airlines")
+                oComponent.getCachedList("people", "/People"),
+                oComponent.getCachedList("airports", "/Airports"),
+                oComponent.getCachedList("airlines", "/Airlines")
             ]).then(function (aResults) {
                 var aPeople = aResults[0];
                 oViewModel.setProperty("/kpi/employees", String(aPeople.length));
                 oViewModel.setProperty("/kpi/airports", String(aResults[1].length));
                 oViewModel.setProperty("/kpi/airlines", String(aResults[2].length));
 
-                // trips zijn alleen per persoon opvraagbaar (containment in TripPin)
+                // trips per persoon uit de gedeelde cache (containment in TripPin)
                 return Promise.all(aPeople.map(function (oPerson) {
-                    return fnList("trips", "/PersonTrips",
-                        [new Filter("personUserName", FilterOperator.EQ, oPerson.UserName)])
-                        .then(function (aTrips) {
-                            return { person: oPerson, trips: aTrips };
-                        });
+                    return oComponent.getCachedTrips(oPerson.UserName).then(function (aTrips) {
+                        return { person: oPerson, trips: aTrips };
+                    });
                 }));
             }).then(function (aPerPerson) {
                 // hergebruikt door fase 2 (top airlines/routes) zodat PersonTrips
@@ -100,13 +85,21 @@ sap.ui.define([
             });
         },
 
-        // Top airlines (op aantal vluchten) en top routes (op from→to paar), berekend
-        // over alle (persoon, trip) paren via /trips/PlanItems. Veel requests, dus één
-        // Promise.all met per-request soft-fail.
+        // Top airlines (op aantal vluchten) en top routes (op from→to paar) over ALLE
+        // (persoon, trip) paren via de gedeelde vlucht-cache. Het resultaat wordt op de
+        // Component gememoïseerd (Variant C): de zware berekening gebeurt één keer per
+        // sessie, revisits zijn direct.
         _loadFlightAggregates: function () {
+            var that = this;
             var oVM = this.getView().getModel("view");
-            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
-            var oTrips = this.getOwnerComponent().getModel("trips");
+            var oComponent = this.getOwnerComponent();
+
+            if (oComponent._oFlightAgg) {
+                oVM.setProperty("/topAirlines", oComponent._oFlightAgg.topAirlines);
+                oVM.setProperty("/topRoutes", oComponent._oFlightAgg.topRoutes);
+                oVM.setProperty("/flightsBusy", false);
+                return;
+            }
 
             var aPairs = [];
             (this._aPerPerson || []).forEach(function (oEntry) {
@@ -119,56 +112,62 @@ sap.ui.define([
                 return;
             }
 
+            // synchrone burst → coalesceert onder $auto tot één $batch; de per-paar
+            // soft-fail zit in getCachedFlights
             Promise.all(aPairs.map(function (oPair) {
-                return oTrips.bindList("/PlanItems", undefined, undefined, [
-                    new Filter("personUserName", FilterOperator.EQ, oPair.user),
-                    new Filter("tripId", FilterOperator.EQ, oPair.tripId)
-                ], { $select: "airlineCode,airlineName,fromIata,fromName,toIata,toName" })
-                .requestContexts(0, 200)
-                .then(function (aContexts) {
-                    return aContexts.map(function (oContext) { return oContext.getObject(); });
-                })
-                .catch(function () { return []; });
+                return oComponent.getCachedFlights(oPair.user, oPair.tripId);
             })).then(function (aPerPair) {
-                var mAir = {};
-                var mRoute = {};
-                aPerPair.forEach(function (aFlights) {
-                    aFlights.forEach(function (oFlight) {
-                        if (oFlight.airlineCode) {
-                            var oA = mAir[oFlight.airlineCode] || (mAir[oFlight.airlineCode] =
-                                { name: oFlight.airlineName || oFlight.airlineCode, count: 0 });
-                            oA.count++;
-                        }
-                        if (oFlight.fromIata && oFlight.toIata) {
-                            var sKey = oFlight.fromIata + "->" + oFlight.toIata;
-                            var oR = mRoute[sKey] || (mRoute[sKey] = {
-                                label: oFlight.fromIata + " → " + oFlight.toIata,
-                                sub: (oFlight.fromName || oFlight.fromIata) + " – "
-                                    + (oFlight.toName || oFlight.toIata),
-                                count: 0
-                            });
-                            oR.count++;
-                        }
-                    });
-                });
-                var fnTop = function (mMap, fnMap) {
-                    return Object.keys(mMap)
-                        .map(function (sK) { return mMap[sK]; })
-                        .sort(function (a, b) { return b.count - a.count; })
-                        .slice(0, 5)
-                        .map(fnMap);
-                };
-                oVM.setProperty("/topAirlines", fnTop(mAir, function (o) {
-                    return { name: o.name, info: oBundle.getText("topFlightsCount", [o.count]) };
-                }));
-                oVM.setProperty("/topRoutes", fnTop(mRoute, function (o) {
-                    return { name: o.label, sub: o.sub, info: oBundle.getText("topRoutesCount", [o.count]) };
-                }));
+                var oAgg = that._buildAggregate(aPerPair);
+                oComponent._oFlightAgg = oAgg;
+                oVM.setProperty("/topAirlines", oAgg.topAirlines);
+                oVM.setProperty("/topRoutes", oAgg.topRoutes);
                 oVM.setProperty("/flightsBusy", false);
             }).catch(function (oError) {
                 Log.error("Loading flight aggregates failed", oError);
                 oVM.setProperty("/flightsBusy", false);
             });
+        },
+
+        // Telt vluchten per airline en per from→to route; geeft de top 5 van elk terug
+        // als gelokaliseerde lijst-items. Gedeeld door alle aggregatie-aanroepen.
+        _buildAggregate: function (aPerPair) {
+            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            var mAir = {};
+            var mRoute = {};
+            aPerPair.forEach(function (aFlights) {
+                aFlights.forEach(function (oFlight) {
+                    if (oFlight.airlineCode) {
+                        var oA = mAir[oFlight.airlineCode] || (mAir[oFlight.airlineCode] =
+                            { name: oFlight.airlineName || oFlight.airlineCode, count: 0 });
+                        oA.count++;
+                    }
+                    if (oFlight.fromIata && oFlight.toIata) {
+                        var sKey = oFlight.fromIata + "->" + oFlight.toIata;
+                        var oR = mRoute[sKey] || (mRoute[sKey] = {
+                            label: oFlight.fromIata + " → " + oFlight.toIata,
+                            sub: (oFlight.fromName || oFlight.fromIata) + " – "
+                                + (oFlight.toName || oFlight.toIata),
+                            count: 0
+                        });
+                        oR.count++;
+                    }
+                });
+            });
+            var fnTop = function (mMap, fnMap) {
+                return Object.keys(mMap)
+                    .map(function (sK) { return mMap[sK]; })
+                    .sort(function (a, b) { return b.count - a.count; })
+                    .slice(0, 5)
+                    .map(fnMap);
+            };
+            return {
+                topAirlines: fnTop(mAir, function (o) {
+                    return { name: o.name, info: oBundle.getText("topFlightsCount", [o.count]) };
+                }),
+                topRoutes: fnTop(mRoute, function (o) {
+                    return { name: o.label, sub: o.sub, info: oBundle.getText("topRoutesCount", [o.count]) };
+                })
+            };
         }
 
     });

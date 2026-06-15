@@ -27,15 +27,11 @@ sap.ui.define([
 
         _loadAirports: function () {
             var that = this;
-            var oModel = this.getOwnerComponent().getModel("airports");
-            oModel.bindList("/Airports").requestContexts(0, 200).then(function (aContexts) {
-                var aAirports = aContexts.map(function (oContext) {
-                    return oContext.getObject();
-                });
-                aAirports.sort(function (a, b) {
+            this.getOwnerComponent().getCachedList("airports", "/Airports").then(function (aAirports) {
+                // kopie vóór sort — gedeelde cache-array niet muteren
+                that._aAllAirports = aAirports.slice().sort(function (a, b) {
                     return a.Name < b.Name ? -1 : 1;
                 });
-                that._aAllAirports = aAirports;
                 that._applySearch();
                 that._renderMarkers();
             }).catch(function (oError) {

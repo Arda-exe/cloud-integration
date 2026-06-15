@@ -15,17 +15,13 @@ sap.ui.define([
 
         _loadPeople: function () {
             var that = this;
-            var oModel = this.getOwnerComponent().getModel("people");
-            oModel.bindList("/People").requestContexts(0, 200).then(function (aContexts) {
-                var aPeople = aContexts.map(function (oContext) {
-                    return oContext.getObject();
-                });
-                aPeople.sort(function (a, b) {
+            this.getOwnerComponent().getCachedList("people", "/People").then(function (aPeople) {
+                // kopie vóór sort — nooit de gedeelde cache-array in place sorteren
+                that._aAllPeople = aPeople.slice().sort(function (a, b) {
                     var sA = (a.LastName || "") + (a.FirstName || "");
                     var sB = (b.LastName || "") + (b.FirstName || "");
                     return sA < sB ? -1 : 1;
                 });
-                that._aAllPeople = aPeople;
                 that._applySearch();
             }).catch(function (oError) {
                 Log.error("Loading employees failed", oError);

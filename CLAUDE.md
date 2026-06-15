@@ -180,6 +180,32 @@ Three user roles enforced via XSUAA: **TravelCoordinator** (read/write, approve/
   `httpCredentials`) were used to verify features end-to-end; ask Claude to re-run or
   extend them when adding features.
 
+## Performance (frontend, 15 June)
+
+The app proxies the slow public TripPin service (no backend cache/keep-alive yet — see
+"Backend needed: performance"), so the frontend minimises repeat requests:
+
+- **App-level data cache** in `Component.js`: `getCachedList(model,path)` (/People, /Airports,
+  /Airlines), `getCachedTrips(user)` (PersonTrips), `getCachedFlights(user,tripId)` (PlanItems).
+  Each stores a **Promise of `getObject()` snapshots**, so concurrent first-callers share one
+  in-flight request and every view reuses the result — no re-fetch on tab switches. Rejected
+  Promises are evicted (not cached) so a retry can succeed.
+- Consumers (`Employees`, `Airports`, `EmployeeDetail`, `TripDetail`, `Overview`, `App` global
+  search) read from the cache. **Always `.slice()` before `.sort()`** — the cached arrays are
+  shared; sorting in place would reorder them for every other view (the main regression risk).
+- **`TripExtensions` is intentionally NOT cached** (it's writable) — `TripDetail` reads it live so
+  approve/reject/submit reflect immediately after `_load()`. TripPin trip/flight facts are
+  read-only, so their caches never go stale.
+- **Overview top airlines/routes** are aggregated over **all** trips once and **memoized on the
+  Component** (`_oFlightAgg`): the first Overview visit pays the cost (chosen tradeoff), every
+  revisit is instant. The PlanItems burst uses the default `$auto` group, which coalesces the
+  synchronous requests into one `$batch`.
+- **Leaflet** is loaded with `defer` in `index.html` so it doesn't block first paint.
+
+⚠️ The **first cold load** is still bound by backend latency (each read is a fresh remote call to
+TripPin). The frontend cache fixes navigation/revisits, not the first fetch — see
+"Backend needed: performance".
+
 ## In scope (frontend feature list, build one at a time)
 
 1. ~~Employees tab: searchable list, click-through to employee detail page.~~ ✅ done
@@ -325,6 +351,25 @@ the frontend out of `srv/` per the team split.
   Works under mocked auth and XSUAA. Kept in its **own files + own commit** so the backend
   team can review or relocate it. (The frontend team explicitly approved this cross-team
   addition — it's the only way the client can learn the user's role for gating.)
+
+## Backend needed: performance (biggest win — NOT implemented, per the team split)
+
+Profiling showed one Overview load ≈ **~70 cold remote round-trips** to the public TripPin
+service. The frontend cache (see "Performance (frontend)") fixes repeat/navigation cost, but the
+**first** load stays slow because the backend re-fetches TripPin on every read with no reuse.
+Recommended backend fixes (priority order):
+
+- **In-memory TripPin response cache** — a shared helper (e.g. `srv/trippin.js`) wrapping the
+  remote fetch with a `Map<url,{json,expires}>` and a short TTL (~60s), required by all four
+  services. TripPin is read-only within a session, so repeated reads become instant. **Biggest win.**
+- **HTTP keep-alive / connection pooling** — a shared agent (Node `undici` `setGlobalDispatcher`
+  or `https.Agent({keepAlive:true})`) so the ~40-request flight burst reuses TCP/TLS instead of a
+  fresh handshake per call. Note: `setGlobalDispatcher` is process-wide.
+- **(Optional) server-side aggregation endpoint** for top airlines/routes (one request instead of
+  ~40), and parallelizing/caching `fetchAllPages`.
+
+These subsume earlier issues #1 (`cds.connect.to('TripPin')` gives pooling) and #3 (paging). Keep
+them in backend commits; the frontend already minimises what it asks for.
 
 ## Backend needed: Add Trip (DB) — feature 8 "add trip" (NOT yet implemented)
 

@@ -20,6 +20,11 @@
                 <headerToolbar>
                     <OverflowToolbar>
                         <Title text="{i18n>employeesTableTitle} ({view>/count})" />
+                        <Button
+                            text="{i18n>btnAllTrips}"
+                            type="Emphasized"
+                            icon="sap-icon://travel-itinerary"
+                            press=".onAllTrips" />
                         <ToolbarSpacer />
                         <Label text="{i18n>statusFilterLabel}" class="sapUiTinyMarginEnd" />
                         <Select id="statusFilter" change=".onStatusChange">
@@ -27,6 +32,14 @@
                             <core:Item key="traveling" text="{i18n>statusTraveling}" />
                             <core:Item key="upcoming" text="{i18n>statusUpcoming}" />
                             <core:Item key="available" text="{i18n>statusAvailable}" />
+                        </Select>
+                        <Label text="{i18n>teamFilterLabel}" class="sapUiTinyMarginEnd" />
+                        <Select id="teamFilter" items="{view>/teamOptions}" change=".onTeamChange">
+                            <core:Item key="{view>key}" text="{view>text}" />
+                        </Select>
+                        <Label text="{i18n>companyFilterLabel}" class="sapUiTinyMarginEnd" />
+                        <Select id="companyFilter" items="{view>/companyOptions}" change=".onCompanyChange">
+                            <core:Item key="{view>key}" text="{view>text}" />
                         </Select>
                         <SearchField
                             id="searchField"
@@ -44,6 +57,12 @@
                         <Text text="{i18n>colStatus}" />
                     </Column>
                     <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colTeam}" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colCompany}" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
                         <Text text="{i18n>colUserName}" />
                     </Column>
                     <Column minScreenWidth="Desktop" demandPopin="true">
@@ -56,6 +75,8 @@
                         <cells>
                             <ObjectIdentifier title="{view>FirstName} {view>LastName}" />
                             <ObjectStatus text="{view>statusText}" state="{view>statusState}" />
+                            <Text text="{view>team}" />
+                            <Text text="{view>company}" />
                             <Text text="{view>UserName}" />
                             <Text text="{path: 'view>Emails', targetType: 'any', formatter: '.formatEmails'}" />
                         </cells>

@@ -158,6 +158,11 @@
                     "name": "trip",
                     "pattern": "employees/{userName}/trips/{tripId}",
                     "target": "trip"
+                },
+                {
+                    "name": "allTrips",
+                    "pattern": "alltrips",
+                    "target": "allTrips"
                 }
             ],
             "targets": {
@@ -184,6 +189,10 @@
                 "trip": {
                     "name": "TripDetail",
                     "viewId": "tripDetail"
+                },
+                "allTrips": {
+                    "name": "AllTrips",
+                    "viewId": "allTrips"
                 }
             }
         }

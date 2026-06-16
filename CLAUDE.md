@@ -130,6 +130,8 @@ concurrent first-callers share one request; **rejected promises are evicted** so
   flights }`. The flight burst coalesces into one `$batch` under `$auto`.
 - `getFlightAggregate()` — all-time aggregate (top airlines/routes + `byAirport`), memoised.
 - `getAirportsByIata()` — IATA → airport-object map (O(1) lookup), memoised.
+- `getPersonExtensions()` — `personUserName` → `{team,company,department,status}` map
+  (`/people/PersonExtensions`), memoised. Joined client-side on `UserName` for team/company.
 - `_loadCurrentUser()` — `GET /user/whoami()` → the `app` JSON model
   `{ showChrome, user: { id, roles, isCoordinator, roleLabel } }`. Sends the `Authorization`
   header set by `loginAs` (local); on BTP relies on the forwarded XSUAA session.
@@ -163,6 +165,11 @@ it live so approve/reject/submit reflect immediately.
   Filtering is client-side over the cached sets.
 - `util/datePresets.js` — `rangeFor(key)` → `{from,to}` (or `null` = all-time) for the
   period quick-select buttons; relative to today, shared by Overview + Employee detail.
+- `util/tripGroups.js` — `groupTrips(perPerson, extMap)`: pure, model-free grouping of trip copies
+  into one group per real trip (`ShareId || user|tripId`) with a `members` array (per traveller:
+  budget + `statusKey` + `canSubmit`/`canAct`), `totalBudget`, and `repUserName`/`repTripId`.
+  Cache-safe (emits fresh objects). Shared by **All Trips** (grouped list) + **Trip detail**
+  (combined + per-user budget).
 
 ### Cross-cutting gotchas
 - **`layoutData` aggregation namespace must match its parent's** in XML views: `<core:layoutData>`
@@ -207,26 +214,49 @@ launchpad is bypassed (role comes from the XSUAA user). No backend change — se
 - Searchable table (name/username/email, client-side) + a **Status filter** (`Select`) and a
   **Status badge** column (`ObjectStatus`): *Traveling / Upcoming / Available*, derived from each
   person's trips vs today (built on augmented copies — never mutating the cache). Click → detail.
+- **Team & Company** columns + two `Select` filters (distinct values, "All" sentinel prepended in
+  JS), from `Component.getPersonExtensions()` (`/people/PersonExtensions`) joined on `UserName`.
+- An **"All trips"** button (toolbar) → the All Trips view (`onAllTrips` → `navTo("allTrips")`).
 
 **Employee detail** (`EmployeeDetail.view/controller`).
-- Large name header (`sap.m.Title titleStyle="H1"`) + email/city (no username).
+- Large name header (`sap.m.Title titleStyle="H1"`) + email/city (no username) + **Team/Company**
+  (loaded into `detail>/team` + `/company` via `getPersonExtensions()`, shown when present).
 - Three trip-counter tiles: Total / Upcoming / Completed (over the person's full trip set).
 - Trips table with a period `DateRangeSelection` + the same quick-preset buttons as Overview
   (`util/datePresets.js`, active preset in `detail>/preset`); a **"Locate on date"** button opens
   `LocationPopover.fragment.xml` (a `DatePicker` → where the person was that day: on a trip / at
-  home).
+  home). (Trip creation lives in **All Trips**, not here.)
 
-**Trip detail** (`TripDetail.view/controller`) — reached via a trip row.
-- The **flight-route block** (origin→destination, departure/arrival airport cards with
-  coordinates and "trips via airport") and the **"Travellers on this trip"** panel sit **side by
-  side** (`FlexBox`). The route is hidden when there are no flights.
-- **Shared-trip handling:** co-travellers = everyone sharing the `ShareId` (including the current
-  person), click → their detail. If the current person's copy has **no flights**, flights are
-  **borrowed from a co-traveller's copy** that has them, so every copy shows the same route.
+**All trips** (`AllTrips.view/controller`) — route `allTrips` (pattern `alltrips`), reached via the
+Employees toolbar button (Emphasized); **not** a top-level tab (honors *"No Trips landing tab"*) —
+its route maps to the Employees tab. **One row per REAL trip:** copies of the same shared trip are
+grouped by `ShareId` via `util/tripGroups.js` `groupTrips(perPerson, extMap)` (one group per
+`ShareId || user|tripId`; own trips stay singletons). Columns **Trip | Travellers & approvals |
+Total budget**.
+- **Per-traveller** budget + approval: the Travellers cell nests a `VBox items="{view>members}"`
+  (each member = one employee's copy) showing their own budget, status badge, and (coordinator-only)
+  **Submit / Approve / Reject** — the action handlers read the bound **member** and are unchanged.
+  Status is **dual-sourced**: own trips carry `approvalStatus`; TripPin trips look up a **live
+  (uncached)** `/TripExtensions` map (absent = "not submitted"). Actions branch on `isOwn`: own →
+  PATCH `/trips/OwnTrips('uuid')`; TripPin → `TripExtensions.create` (submit) or bound
+  `TripsService.approve`/`rejectTrip`. Own-trip writes evict `_mTripsCache[user]` + `_pTripData`.
+- **Total budget** column = sum of the members' budgets. Search matches trip name + any traveller;
+  the approval `Select` keeps a group when **any** member matches.
+- **Create trip** (coordinator): `CreateTripDialog.fragment.xml` (employee `ComboBox`, single
+  employee) → POST `/trips/OwnTrips`. Created own-trips have no `ShareId` → not grouped.
+
+**Trip detail** (`TripDetail.view/controller`) — reached via a trip row (incl. All Trips). Content
+is **identical from any traveller's copy** (it aggregates by `ShareId`), so no per-copy routing.
+- The **flight-route block** and a **"Travellers & budgets"** panel sit side by side (`FlexBox`).
+- **Combined budget:** the `ObjectHeader` number is the **sum across travellers** (`trip>/totalBudget`,
+  seeded from the entered copy then overwritten by the group sum). The **Travellers & budgets** table
+  (`trip>/members`, built by `tripGroups.groupTrips` + a live `/TripExtensions` map) lists each
+  employee with **their own budget + status** (Link → their detail). Approval is **read-only** here
+  (actions live in All Trips).
+- **Shared-trip flights:** if the current copy has **no flights**, they are **borrowed** from a
+  co-traveller's copy (same `ShareId`) that has them, so every copy shows the same route.
 - Flights table (`PlanItems`): flight no.+airline, From/To (Links → airport focus), departure/
-  arrival, seat. Trip details panel (description). Approval panel = **status only** (`ObjectStatus`).
-- Coordinator-only footer: **Submit** (a confirm dialog → creates a pending `TripExtension`),
-  **Approve**, **Reject** (bound `TripsService.approve` / `rejectTrip` actions, then reload).
+  arrival, seat. Trip details panel (description).
 
 **Airports** (`Airports.view/controller`).
 - **Leaflet map** (marker per airport) on the left + an **always-on right `NavContainer`
@@ -277,11 +307,19 @@ it raises items here.
   the entire `/People` collection ("data not loading"). The fix lives in `srv/people-service.js`
   (filter `Jdbc*` + dedupe by `UserName`). **Keep it** — without it the dashboard cannot load
   people. This stays an owned backend behaviour.
-- **Per-employee Company/Team store (parked).** If the dropped "company/team on the employee"
-  feature is revived, it needs a backend table (e.g. a `PersonExtension` keyed on
-  `personUserName`) for CAP to CRUD; there is no such store today.
-- **Persisting coordinator-created trips ("Add trip") (parked).** Letting a coordinator create a
-  trip in our own DB needs a backend store; not built.
+- **Per-employee Company/Team store (delivered).** Backed by `PersonExtension` (CAP DB, key
+  `personUserName`; fields `team`/`company`/`department`/`status`), exposed at
+  `/people/PersonExtensions`. The frontend reads it via `Component.getPersonExtensions()` (memoised
+  `personUserName → ext` map) and joins client-side on `UserName`: team/company show as columns +
+  filters in Employees and on the EmployeeDetail header.
+- **Persisting coordinator-created trips ("Add trip") (delivered).** Backed by `OwnTrip` (CAP DB,
+  key `tripId` UUID), exposed `/trips/OwnTrips` (Coordinator WRITE). The **All Trips** view (route
+  `allTrips`, reached via a button in Employees) hosts the create dialog (employee picker + name,
+  destination, dates, budget, description) and POSTs to `/trips/OwnTrips`.
+- **Flight (PlanItem) entry on created trips (parked).** Created `OwnTrip`s are trip-level only —
+  there is **no backend store for flights** on our own trips, so they show the "No flights recorded"
+  state in TripDetail. Capturing origin/destination airports, airline, times and seat would need a
+  backend PlanItem store keyed on the trip; not built.
 
 ## Out of scope / decisions
 

@@ -28,6 +28,7 @@ sap.ui.define([
             this._pFlightData = null;
             this._pFlightAgg = null;
             this._pAirportsByIata = null;
+            this._pPersonExt = null;
 
             this._bLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
             this._sAuthHeader = null;
@@ -90,13 +91,14 @@ sap.ui.define([
                     .then(function (json) {
                         return (json.value || []).map(function (o) {
                             return {
-                                TripId:      o.tripId,
-                                Name:        o.name,
-                                StartsAt:    o.startsAt,
-                                EndsAt:      o.endsAt,
-                                Budget:      o.budget,
-                                Description: o.description || o.destination || "",
-                                _isOwn:      true
+                                TripId:         o.tripId,
+                                Name:           o.name,
+                                StartsAt:       o.startsAt,
+                                EndsAt:         o.endsAt,
+                                Budget:         o.budget,
+                                Description:    o.description || o.destination || "",
+                                approvalStatus: o.approvalStatus,
+                                _isOwn:         true
                             };
                         });
                     })
@@ -221,6 +223,28 @@ sap.ui.define([
                     });
             }
             return this._pAirportsByIata;
+        },
+
+        // PersonExtension (team/company/department/status per medewerker) → map op personUserName.
+        // Aparte CAP-entiteit, niet op /People — client-side joinen op UserName. Gememoïseerd
+        // zoals getAirportsByIata; hergebruikt getCachedList zodat de auth-header al gezet is.
+        getPersonExtensions: function () {
+            if (!this._pPersonExt) {
+                var that = this;
+                this._pPersonExt = this.getCachedList("people", "/PersonExtensions")
+                    .then(function (aExt) {
+                        var mByUser = {};
+                        aExt.forEach(function (oExt) {
+                            mByUser[oExt.personUserName] = oExt;
+                        });
+                        return mByUser;
+                    })
+                    .catch(function (oError) {
+                        that._pPersonExt = null;
+                        throw oError;
+                    });
+            }
+            return this._pPersonExt;
         },
 
         needsLogin: function () {

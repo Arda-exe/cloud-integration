@@ -1,14 +1,12 @@
 sap.ui.define([
     "primepath/dashboard/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
     "sap/ui/core/format/DateFormat",
     "sap/m/MessageToast",
-    "sap/m/MessageBox",
     "sap/base/Log",
-    "primepath/dashboard/util/formatters"
-], function (BaseController, JSONModel, Filter, FilterOperator, DateFormat, MessageToast, MessageBox, Log, formatters) {
+    "primepath/dashboard/util/formatters",
+    "primepath/dashboard/util/tripGroups"
+], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, tripGroups) {
     "use strict";
 
     var STATUS_STATE = {
@@ -17,11 +15,8 @@ sap.ui.define([
         pending:  "Warning"
     };
 
-    var STATUS_TEXT = {
-        approved: "Goedgekeurd",
-        rejected: "Afgekeurd",
-        pending:  "In behandeling"
-    };
+    // statuskey → i18n-sleutel; zelfde teksten als de All Trips-lijst
+    var STATUS_TEXT_KEY = { approved: "appr_approved", rejected: "appr_rejected", pending: "appr_pending" };
 
     return BaseController.extend("primepath.dashboard.controller.TripDetail", {
 
@@ -33,14 +28,22 @@ sap.ui.define([
                 personName: "",
                 periodText: "",
                 trip: {},
-                ext: {},
+                totalBudget: 0,
+                members: [],
                 flights: [],
                 flightsBusy: false,
-                route: { has: false },
-                coTravellers: []
+                route: { has: false }
             }), "trip");
             this.getRouter().getRoute("trip")
                 .attachPatternMatched(this.onPatternMatched, this);
+        },
+
+        // statuskey → leesbare tekst (gedeeld met de All Trips-lijst)
+        _statusText: function (sKey) {
+            var oBundle = this.getResourceBundle();
+            return sKey === "notsubmitted"
+                ? oBundle.getText("approvalNone")
+                : oBundle.getText(STATUS_TEXT_KEY[sKey] || "approvalNone");
         },
 
        onPatternMatched: function (oEvent) {
@@ -69,8 +72,8 @@ sap.ui.define([
 
             oModel.setData({
                 busy: true, personName: this._sUserName, periodText: "",
-                trip: {}, ext: {}, flights: [], flightsBusy: false,
-                route: { has: false }, coTravellers: []
+                trip: {}, totalBudget: 0, members: [], flights: [], flightsBusy: false,
+                route: { has: false }
             });
 
             var mHeaders = { Accept: "application/json" };
@@ -90,11 +93,15 @@ sap.ui.define([
                     });
                     oModel.setProperty("/personName", that._sUserName);
                     oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
-                    oModel.setProperty("/ext", {
-                        exists:      true,
-                        statusText:  STATUS_TEXT[sStatus] || sStatus,
+                    // eigen trip = één reiziger → totaal = eigen budget
+                    oModel.setProperty("/totalBudget", oTrip.budget || 0);
+                    oModel.setProperty("/members", [{
+                        userName:    that._sUserName,
+                        name:        that._sUserName,
+                        budget:      oTrip.budget,
+                        statusText:  that._statusText(sStatus),
                         statusState: STATUS_STATE[sStatus] || "None"
-                    });
+                    }]);
                     oModel.setProperty("/busy", false);
                     oModel.setProperty("/flightsBusy", false);
                 })
@@ -104,38 +111,6 @@ sap.ui.define([
                     oModel.setProperty("/flightsBusy", false);
                     MessageToast.show(that.getResourceBundle().getText("tripLoadError"));
                 });
-        },
-
-        _approveOwnTrip: function () {
-            this._patchOwnTripStatus("approved");
-        },
-
-        _rejectOwnTrip: function () {
-            this._patchOwnTripStatus("rejected");
-        },
-
-        _patchOwnTripStatus: function (sStatus) {
-            var that = this;
-            var oComp = this.getOwnerComponent();
-            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
-            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
-
-            fetch("/trips/OwnTrips('" + this._sTripIdRaw + "')", {
-                method: "PATCH",
-                headers: mHeaders,
-                body: JSON.stringify({ approvalStatus: sStatus })
-            })
-            .then(function (r) {
-                if (!r.ok) { throw new Error("HTTP " + r.status); }
-                MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
-                // cache wissen zodat employee detail ook de nieuwe status ziet
-                delete oComp._mTripsCache[that._sUserName];
-                that._loadOwnTrip();
-            })
-            .catch(function (oError) {
-                Log.error("Patch own trip status failed", oError);
-                MessageToast.show(that.getResourceBundle().getText("approvalActionError"));
-            });
         },
 
         _loadTripPinTrip: function () {
@@ -152,21 +127,15 @@ sap.ui.define([
                 personName: this._sUserName,
                 periodText: "",
                 trip: {},
-                ext: {},
+                totalBudget: 0,
+                members: [],
                 flights: [],
                 flightsBusy: true,
-                route: { has: false },
-                coTravellers: []
+                route: { has: false }
             });
-
-            var oExtBinding = oTripsModel.bindList("/TripExtensions", undefined, undefined, [
-                new Filter("personUserName", FilterOperator.EQ, this._sUserName),
-                new Filter("tripId", FilterOperator.EQ, this._iTripId)
-            ], { $select: "tripId,personUserName,approvalStatus" });
 
             Promise.all([
                 oComponent.getCachedTrips(this._sUserName),
-                oExtBinding.requestContexts(0, 1),
                 oComponent.getCachedFlights(this._sUserName, this._iTripId),
                 oComponent.getAirportsByIata().catch(function () { return {}; })
             ]).then(function (aResults) {
@@ -182,10 +151,10 @@ sap.ui.define([
                     return;
                 }
 
-                var aExt = aResults[1];
-                var aOwnFlights = aResults[2];
-                var mByIata = aResults[3];
-                that._applyTrip(oTrip, aExt.length ? aExt[0].getObject() : null);
+                var aOwnFlights = aResults[1];
+                var mByIata = aResults[2];
+                // per-reiziger budget + status komt uit _loadSharedTrip (groepeert op ShareId)
+                that._applyTrip(oTrip);
                 oModel.setProperty("/busy", false);
 
                 if (aOwnFlights && aOwnFlights.length) {
@@ -225,18 +194,12 @@ sap.ui.define([
             oModel.setProperty("/flightsBusy", false);
         },
 
-        _applyTrip: function (oTrip, oExt) {
+        _applyTrip: function (oTrip) {
             var oModel = this.getView().getModel("trip");
-            var oBundle = this.getResourceBundle();
             oModel.setProperty("/trip", oTrip);
             oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.StartsAt, oTrip.EndsAt));
-
-            var sStatus = oExt && oExt.approvalStatus;
-            oModel.setProperty("/ext", {
-                exists:      !!oExt,
-                statusText:  sStatus ? (STATUS_TEXT[sStatus] || sStatus) : oBundle.getText("approvalNone"),
-                statusState: STATUS_STATE[sStatus] || "None"
-            });
+            // voorlopig totaal = budget van deze kopie; _loadSharedTrip overschrijft met de som
+            oModel.setProperty("/totalBudget", oTrip.Budget || 0);
         },
 
         _applyRoute: function (aFlights, mByIata) {
@@ -302,44 +265,59 @@ sap.ui.define([
             });
         },
 
+        // De pagina is identiek vanuit elke kopie: groepeer op ShareId → combineer budgetten,
+        // toon elke reiziger met eigen budget + status, en leen vluchten van een kopie die ze
+        // wél heeft. Gebruikt dezelfde util + LIVE TripExtensions-map als de All Trips-lijst.
         _loadSharedTrip: function (oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq) {
             var that = this;
             var oModel = this.getView().getModel("trip");
-            var sShareId = oTrip.ShareId;
-            this.getOwnerComponent().getTripData().then(function (aPerPerson) {
+            var oComp = this.getOwnerComponent();
+            var oExtBinding = oComp.getModel("trips").bindList("/TripExtensions");
+
+            Promise.all([
+                oComp.getTripData(),
+                oExtBinding.requestContexts(0, 1000)
+            ]).then(function (aResults) {
                 if (iSeq !== that._iLoadSeq) { return; }
-                var mSeen = {};
-                var aCo = [];
-                var aPairs = [];
-                aPerPerson.forEach(function (oEntry) {
-                    oEntry.trips.forEach(function (oT) {
-                        if (oT._isOwn) { return; }
-                        if (sShareId && oT.ShareId === sShareId) {
-                            aPairs.push({ user: oEntry.person.UserName, tripId: oT.TripId });
-                            if (!mSeen[oEntry.person.UserName]) {
-                                mSeen[oEntry.person.UserName] = true;
-                                aCo.push({
-                                    userName: oEntry.person.UserName,
-                                    name: (oEntry.person.FirstName || "") + " " + (oEntry.person.LastName || "")
-                                });
-                            }
-                        }
+                var aPerPerson = aResults[0];
+                var mExt = {};
+                aResults[1].forEach(function (oCtx) {
+                    var o = oCtx.getObject();
+                    mExt[o.personUserName + "|" + o.tripId] = o.approvalStatus;
+                });
+
+                var aGroups = tripGroups.groupTrips(aPerPerson, mExt);
+                var oGroup = aGroups.find(function (g) {
+                    return g.members.some(function (m) {
+                        return m.userName === sUserName && String(m.tripId) === String(iTripId);
                     });
                 });
-                oModel.setProperty("/coTravellers", aCo);
+                var aMembers = (oGroup ? oGroup.members : []).map(function (m) {
+                    return {
+                        userName:    m.userName,
+                        name:        m.fullName,
+                        budget:      m.budget,
+                        statusText:  that._statusText(m.statusKey),
+                        statusState: STATUS_STATE[m.statusKey] || "None"
+                    };
+                });
+                oModel.setProperty("/members", aMembers);
+                oModel.setProperty("/totalBudget", oGroup ? oGroup.totalBudget : (oTrip.Budget || 0));
+
+                // vlucht-borrow: andere kopieën in dezelfde groep (behalve de huidige)
                 if (aOwnFlights && aOwnFlights.length) { return; }
-                var aOther = aPairs.filter(function (p) {
-                    return !(p.user === sUserName && p.tripId === iTripId);
+                var aOther = (oGroup ? oGroup.members : []).filter(function (m) {
+                    return !(m.userName === sUserName && String(m.tripId) === String(iTripId));
                 });
                 if (!aOther.length) {
                     oModel.setProperty("/flightsBusy", false);
                     return;
                 }
-                Promise.all(aOther.map(function (p) {
-                    return that.getOwnerComponent().getCachedFlights(p.user, p.tripId);
-                })).then(function (aResults) {
+                Promise.all(aOther.map(function (m) {
+                    return oComp.getCachedFlights(m.userName, m.tripId);
+                })).then(function (aFlightResults) {
                     if (iSeq !== that._iLoadSeq) { return; }
-                    var aBorrowed = aResults.find(function (a) { return a && a.length; }) || [];
+                    var aBorrowed = aFlightResults.find(function (a) { return a && a.length; }) || [];
                     that._applyFlights(aBorrowed);
                     that._applyRoute(aBorrowed, mByIata || {});
                     that._loadAirportTripCounts();
@@ -347,7 +325,7 @@ sap.ui.define([
             }).catch(function (oError) {
                 if (iSeq !== that._iLoadSeq) { return; }
                 Log.error("Loading shared trip failed", oError);
-                oModel.setProperty("/coTravellers", []);
+                oModel.setProperty("/members", []);
                 oModel.setProperty("/flightsBusy", false);
             });
         },
@@ -371,85 +349,6 @@ sap.ui.define([
 
         onNavBack: function () {
             this.getRouter().navTo("employee", { userName: this._sUserName });
-        },
-
-        onApprove: function () {
-            if (this._bIsOwn) {
-                this._patchOwnTripStatus("approved");
-            } else {
-                this._invokeExtAction("approve");
-            }
-        },
-
-        onReject: function () {
-            if (this._bIsOwn) {
-                this._patchOwnTripStatus("rejected");
-            } else {
-                this._invokeExtAction("rejectTrip");
-            }
-        },
-
-        onSubmitApproval: function () {
-            var that = this;
-            var oBundle = this.getResourceBundle();
-            MessageBox.confirm(oBundle.getText("approvalConfirm"), {
-                title: oBundle.getText("btnSubmit"),
-                onClose: function (sAction) {
-                    if (sAction !== MessageBox.Action.OK) { return; }
-                    that.getOwnerComponent().getModel("trips")
-                        .bindList("/TripExtensions")
-                        .create({ personUserName: that._sUserName, tripId: that._iTripId })
-                        .created().then(function () {
-                            MessageToast.show(oBundle.getText("approvalSubmitted"));
-                            that._load();
-                        }).catch(function (oError) {
-                            Log.error("Submitting approval record failed", oError);
-                            MessageToast.show(oBundle.getText("approvalSubmitError"));
-                        });
-                }
-            });
-        },
-
-        _invokeExtAction: function (sAction) {
-            var that = this;
-            var oModel = this.getOwnerComponent().getModel("trips");
-            var oEntityContext = oModel.bindContext(this._extPath()).getBoundContext();
-            var oOperation = oModel.bindContext("TripsService." + sAction + "(...)", oEntityContext);
-            return oOperation.execute().then(function () {
-                MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
-                that._load();
-            }).catch(function (oError) {
-                Log.error("Action " + sAction + " failed", oError);
-                MessageToast.show(that.getResourceBundle().getText("approvalActionError"));
-            });
-        },
-
-        _patchOwnTripStatus: function (sStatus) {
-            var that = this;
-            var oComp = this.getOwnerComponent();
-            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
-            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
-
-            fetch("/trips/OwnTrips('" + this._sTripIdRaw + "')", {
-                method: "PATCH",
-                headers: mHeaders,
-                body: JSON.stringify({ approvalStatus: sStatus })
-            })
-            .then(function (r) {
-                if (!r.ok) { throw new Error("HTTP " + r.status); }
-                MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
-                delete oComp._mTripsCache[that._sUserName];
-                that._loadOwnTrip();
-            })
-            .catch(function (oError) {
-                Log.error("Patch own trip status failed", oError);
-                MessageToast.show(that.getResourceBundle().getText("approvalActionError"));
-            });
-        },
-
-        _extPath: function () {
-            var sUser = "'" + String(this._sUserName).replace(/'/g, "''") + "'";
-            return "/TripExtensions(personUserName=" + sUser + ",tripId=" + this._iTripId + ")";
         }
     });
 });

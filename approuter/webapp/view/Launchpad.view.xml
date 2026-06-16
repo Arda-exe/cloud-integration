@@ -1,0 +1,47 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.Launchpad"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"
+    xmlns="sap.m">
+
+    <!-- SAP-launchpad-stijl startscherm: kies een rol → echte login als die rol (zie
+         Launchpad.controller + Component.loginAs). De tab-balk is hier verborgen
+         (App.view bindt IconTabHeader visible aan app>/showChrome). -->
+    <Page showHeader="false" backgroundDesign="List">
+        <content>
+            <VBox alignItems="Center" class="sapUiLargeMarginTop sapUiLargeMarginBottom">
+                <FlexBox wrap="Wrap" justifyContent="Center" alignItems="Center">
+                    <GenericTile class="sapUiSmallMargin" frameType="OneByOne"
+                        header="{i18n>roleTravelCoordinatorTitle}"
+                        subheader="{i18n>roleTravelCoordinatorDesc}"
+                        app:role="TravelCoordinator"
+                        press=".onSelectRole">
+                        <TileContent>
+                            <ImageContent src="sap-icon://approvals" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiSmallMargin" frameType="OneByOne"
+                        header="{i18n>roleTeamLeadTitle}"
+                        subheader="{i18n>roleTeamLeadDesc}"
+                        app:role="TeamLead"
+                        press=".onSelectRole">
+                        <TileContent>
+                            <ImageContent src="sap-icon://manager" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile class="sapUiSmallMargin" frameType="OneByOne"
+                        header="{i18n>roleHRTitle}"
+                        subheader="{i18n>roleHRDesc}"
+                        app:role="HR"
+                        press=".onSelectRole">
+                        <TileContent>
+                            <ImageContent src="sap-icon://employee" />
+                        </TileContent>
+                    </GenericTile>
+                </FlexBox>
+            </VBox>
+        </content>
+    </Page>
+
+</mvc:View>

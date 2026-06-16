@@ -8,11 +8,23 @@
 
     <VBox height="100vh" renderType="Bare">
 
+        <!-- switch-role = nav-back knop (alleen binnen de app via showNavButton) → launchpad.
+             showNavButton/navButtonPressed zijn kern-ShellBar-API (altijd geldig). -->
         <f:ShellBar
-            title="{i18n>shellTitle}" />
+            title="{i18n>shellTitle}"
+            secondaryTitle="{app>/user/roleLabel}"
+            showNavButton="{app>/showChrome}"
+            navButtonPressed=".onSwitchRole">
+            <f:searchManager>
+                <f:SearchManager
+                    placeholder="{i18n>globalSearchPlaceholder}"
+                    search=".onGlobalSearch" />
+            </f:searchManager>
+        </f:ShellBar>
 
         <IconTabHeader
             id="tabHeader"
+            visible="{app>/showChrome}"
             selectedKey="overview"
             select=".onTabSelect"
             mode="Inline">

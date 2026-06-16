@@ -1,0 +1,51 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <Dialog
+        title="{i18n>globalSearchTitle}"
+        contentWidth="26rem"
+        contentHeight="30rem"
+        draggable="true">
+
+        <VBox class="sapUiSmallMarginBeginEnd">
+
+            <List mode="None" items="{search>/employees}" showNoData="false">
+                <headerToolbar>
+                    <Toolbar>
+                        <Title text="{i18n>searchGroupEmployees} ({search>/empCount})" level="H3" />
+                    </Toolbar>
+                </headerToolbar>
+                <StandardListItem
+                    type="Active"
+                    title="{search>title}"
+                    description="{search>desc}"
+                    icon="{search>icon}"
+                    iconDensityAware="false"
+                    press=".onSearchItemPress" />
+            </List>
+
+            <List mode="None" items="{search>/airports}" showNoData="false" class="sapUiSmallMarginTop">
+                <headerToolbar>
+                    <Toolbar>
+                        <Title text="{i18n>searchGroupAirports} ({search>/airportCount})" level="H3" />
+                    </Toolbar>
+                </headerToolbar>
+                <StandardListItem
+                    type="Active"
+                    title="{search>title}"
+                    description="{search>desc}"
+                    icon="{search>icon}"
+                    iconDensityAware="false"
+                    press=".onSearchItemPress" />
+            </List>
+
+        </VBox>
+
+        <beginButton>
+            <Button text="{i18n>btnCloseSearch}" press=".onCloseSearch" />
+        </beginButton>
+
+    </Dialog>
+
+</core:FragmentDefinition>

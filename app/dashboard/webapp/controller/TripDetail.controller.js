@@ -22,6 +22,9 @@ sap.ui.define([
 
         onInit: function () {
             this._oDateTimeFormat = DateFormat.getDateTimeInstance({ style: "medium" });
+            // monotone laad-teller: TripPin is traag en de view wordt hergebruikt tussen trips,
+            // dus een trage vorige load mag de nieuwe niet overschrijven (vgl. EmployeeDetail)
+            this._iLoadSeq = 0;
             this.getView().setModel(new JSONModel({
                 busy: false,
                 personName: "",
@@ -46,6 +49,9 @@ sap.ui.define([
 
         _load: function () {
             var that = this;
+            var iSeq = ++this._iLoadSeq;          // deze load; latere navigatie verhoogt de teller
+            var sUserName = this._sUserName;       // vastleggen → stale-borrow filtert op de juiste kopie
+            var iTripId = this._iTripId;
             var oModel = this.getView().getModel("trip");
             var oComponent = this.getOwnerComponent();
             var oTripsModel = oComponent.getModel("trips");
@@ -77,8 +83,11 @@ sap.ui.define([
                 oComponent.getCachedFlights(this._sUserName, this._iTripId),
                 oComponent.getAirportsByIata().catch(function () { return {}; })
             ]).then(function (aResults) {
+                if (iSeq !== that._iLoadSeq) {
+                    return;   // ondertussen naar een andere trip genavigeerd → resultaat negeren
+                }
                 var oTrip = aResults[0].find(function (oCandidate) {
-                    return oCandidate.TripId === that._iTripId;
+                    return oCandidate.TripId === iTripId;
                 });
 
                 if (!oTrip) {
@@ -101,8 +110,11 @@ sap.ui.define([
                     that._applyRoute(aOwnFlights, mByIata);
                     that._loadAirportTripCounts();
                 }
-                that._loadSharedTrip(oTrip, aOwnFlights, mByIata);
+                that._loadSharedTrip(oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq);
             }).catch(function (oError) {
+                if (iSeq !== that._iLoadSeq) {
+                    return;
+                }
                 Log.error("Loading trip detail failed", oError);
                 oModel.setProperty("/busy", false);
                 oModel.setProperty("/flightsBusy", false);
@@ -147,8 +159,12 @@ sap.ui.define([
             });
         },
 
-        // visuele route (eerste vertrek → laatste aankomst) + airport-facts uit de IATA-index
+        // visuele route: het VOLLEDIGE traject (alle legs in volgorde, opeenvolgende
+        // duplicaten = overstappen samengevoegd) zodat een retour zichtbaar is als
+        // SHA → PEK → SHA i.p.v. enkel eerste-vertrek → laatste-aankomst (die bij een retour
+        // dezelfde luchthaven zijn). Daarnaast één feiten-kaart per UNIEKE luchthaven.
         _applyRoute: function (aFlights, mByIata) {
+            var that = this;
             var oModel = this.getView().getModel("trip");
             if (!aFlights || !aFlights.length) {
                 oModel.setProperty("/route", { has: false });
@@ -157,23 +173,63 @@ sap.ui.define([
             var aSorted = aFlights.slice().sort(function (a, b) {
                 return (a.StartsAt || "") < (b.StartsAt || "") ? -1 : 1;
             });
-            var oFirst = aSorted[0];
-            var oLast = aSorted[aSorted.length - 1];
             var sNone = this.getResourceBundle().getText("valueNone");
-            var oFrom = this._airportFacts(oFirst.fromIata, oFirst.fromName, oFirst.fromCity, mByIata);
-            var oTo = this._airportFacts(oLast.toIata, oLast.toName, oLast.toCity, mByIata);
+
+            // naam/stad-hints per IATA uit de legs (een stop kan 'from' op de ene leg en 'to'
+            // op de andere zijn → neem de eerste niet-lege waarde)
+            var mHint = {};
+            aSorted.forEach(function (f) {
+                if (f.fromIata && !mHint[f.fromIata]) {
+                    mHint[f.fromIata] = { name: f.fromName, city: f.fromCity };
+                }
+                if (f.toIata && !mHint[f.toIata]) {
+                    mHint[f.toIata] = { name: f.toName, city: f.toCity };
+                }
+            });
+
+            // geordend traject from1 → to1 → from2 → … met opeenvolgende duplicaten samengevoegd
+            var aSeq = [];
+            aSorted.forEach(function (f) {
+                [f.fromIata, f.toIata].forEach(function (sIata) {
+                    if (sIata && aSeq[aSeq.length - 1] !== sIata) {
+                        aSeq.push(sIata);
+                    }
+                });
+            });
+
+            // keten-knopen: eerste zonder pijl, de rest met een vlucht-icoon ervoor
+            var aStops = aSeq.map(function (sIata, i) {
+                var h = mHint[sIata] || {};
+                return {
+                    iata: sIata,
+                    name: that._airportFacts(sIata, h.name, h.city, mByIata).name,
+                    showArrow: i > 0
+                };
+            });
+
+            // unieke luchthavens (op IATA, volgorde van eerste bezoek) voor de feiten-kaarten
+            var mSeen = {};
+            var aAirports = [];
+            aSeq.forEach(function (sIata) {
+                if (mSeen[sIata]) {
+                    return;
+                }
+                mSeen[sIata] = true;
+                var h = mHint[sIata] || {};
+                var oFacts = that._airportFacts(sIata, h.name, h.city, mByIata);
+                aAirports.push({
+                    iata: sIata,
+                    name: oFacts.name,
+                    city: oFacts.city,
+                    coords: oFacts.coords,
+                    trips: sNone
+                });
+            });
+
             oModel.setProperty("/route", {
                 has: true,
-                fromIata: oFirst.fromIata || "",
-                fromName: oFrom.name,
-                fromCity: oFrom.city,
-                fromCoords: oFrom.coords,
-                fromTrips: sNone,
-                toIata: oLast.toIata || "",
-                toName: oTo.name,
-                toCity: oTo.city,
-                toCoords: oTo.coords,
-                toTrips: sNone
+                stops: aStops,
+                airports: aAirports
             });
         },
 
@@ -202,17 +258,19 @@ sap.ui.define([
         // "trips via deze luchthaven" komt uit het zware all-time aggregaat → progressief,
         // zodat de route + airport-facts meteen renderen
         _loadAirportTripCounts: function () {
-            var that = this;
             var oModel = this.getView().getModel("trip");
             if (!oModel.getProperty("/route/has")) {
                 return;
             }
             this.getOwnerComponent().getFlightAggregate().then(function (oAgg) {
                 var mBy = oAgg.byAirport || {};
-                var sFrom = oModel.getProperty("/route/fromIata");
-                var sTo = oModel.getProperty("/route/toIata");
-                oModel.setProperty("/route/fromTrips", mBy[sFrom] ? String(mBy[sFrom].trips.length) : "0");
-                oModel.setProperty("/route/toTrips", mBy[sTo] ? String(mBy[sTo].trips.length) : "0");
+                var aAirports = oModel.getProperty("/route/airports") || [];
+                aAirports.forEach(function (oA) {
+                    oA.trips = mBy[oA.iata] ? String(mBy[oA.iata].trips.length) : "0";
+                });
+                // eigen view-model (geen gedeelde cache) → muteren + setProperty om de
+                // kaart-bindings te verversen
+                oModel.setProperty("/route/airports", aAirports);
             }).catch(function (oError) {
                 Log.error("Loading airport trip counts failed", oError);
             });
@@ -222,11 +280,14 @@ sap.ui.define([
         // eigen kopie geen vluchten heeft, leen de vluchten van een mede-reiziger die ze wél
         // heeft — zodat elke kopie dezelfde route/luchthavens toont (TripPin vult PlanItems
         // niet op elke kopie van een gedeelde trip).
-        _loadSharedTrip: function (oTrip, aOwnFlights, mByIata) {
+        _loadSharedTrip: function (oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq) {
             var that = this;
             var oModel = this.getView().getModel("trip");
             var sShareId = oTrip.ShareId;
             this.getOwnerComponent().getTripData().then(function (aPerPerson) {
+                if (iSeq !== that._iLoadSeq) {
+                    return;   // stale: er loopt al een nieuwere load
+                }
                 var mSeen = {};
                 var aCo = [];
                 var aPairs = [];
@@ -250,9 +311,10 @@ sap.ui.define([
                 if (aOwnFlights && aOwnFlights.length) {
                     return;
                 }
-                // leen de vluchten van een andere kopie van dezelfde trip
+                // leen de vluchten van een andere kopie van dezelfde trip (de huidige kopie =
+                // de meegegeven sUserName/iTripId, niet de — mogelijk al gewijzigde — velden)
                 var aOther = aPairs.filter(function (p) {
-                    return !(p.user === that._sUserName && p.tripId === that._iTripId);
+                    return !(p.user === sUserName && p.tripId === iTripId);
                 });
                 if (!aOther.length) {
                     oModel.setProperty("/flightsBusy", false);
@@ -261,12 +323,18 @@ sap.ui.define([
                 Promise.all(aOther.map(function (p) {
                     return that.getOwnerComponent().getCachedFlights(p.user, p.tripId);
                 })).then(function (aResults) {
+                    if (iSeq !== that._iLoadSeq) {
+                        return;
+                    }
                     var aBorrowed = aResults.find(function (a) { return a && a.length; }) || [];
                     that._applyFlights(aBorrowed);
                     that._applyRoute(aBorrowed, mByIata || {});
                     that._loadAirportTripCounts();
                 });
             }).catch(function (oError) {
+                if (iSeq !== that._iLoadSeq) {
+                    return;
+                }
                 Log.error("Loading shared trip failed", oError);
                 oModel.setProperty("/coTravellers", []);
                 oModel.setProperty("/flightsBusy", false);

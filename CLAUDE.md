@@ -18,12 +18,19 @@ Three roles via XSUAA: **TravelCoordinator** (read/write, approve/reject), **Tea
 
 ## Scope & team split
 
-- **This is the frontend team's machine — work on the frontend only**: the SAPUI5 app under
-  `app/dashboard/webapp/`.
-- **Decision: do NOT change the backend.** Do not modify `srv/`, `db/`, or `xs-security.json`.
-  The backend (CAP services, data model, XSUAA, BTP deploy) is the other team's area. The
-  previously-considered backend rework (per-employee company/team store) is **dropped**.
-- See "Backend (other team's area)" for the one historical exception and what currently exists.
+Two-person team, split by area. The two areas are **separately owned** — work within your own
+area and coordinate across the line rather than silently editing the other side.
+
+- **Frontend** — the freestyle SAPUI5 app under `app/dashboard/webapp/` (XML views, JS
+  controllers, client-side aggregation, manifest routing, i18n).
+- **Backend** — the SAP CAP layer: `srv/` (CAP services proxying TripPin + the user service),
+  `db/` (CAP data model), `xs-security.json` (XSUAA roles/scopes), and `mta.yaml` + `approuter/`
+  (BTP Cloud Foundry deploy).
+
+The frontend does **not** make backend changes on its own. Anything the UI needs from the CAP
+layer is written down under **"What the frontend wants from the backend"** and handed to the
+backend side (e.g. the dropped per-employee company/team store needed a backend table that was
+never built).
 
 ## Tech stack
 
@@ -42,19 +49,30 @@ Three roles via XSUAA: **TravelCoordinator** (read/write, approve/reject), **Tea
 > A Figma mockup exists (`primepath_analyse.pdf` / Figma Make React code). It is **reference
 > only** — match layout/intent with SAPUI5 controls, never reuse the code or the exact pixels.
 
-## Repo layout (frontend)
+## Repo layout
 
-`app/dashboard/webapp/`
+### Frontend — `app/dashboard/webapp/`
 - `Component.js` — app-wide data cache + derived-data accessors + role context.
-- `manifest.json` — 4 named OData V4 models, routes, library deps.
+- `manifest.json` — 4 named OData V4 models (`people`/`trips`/`airlines`/`airports` → the
+  backend services `/people/`, `/trips/`, `/airlines/`, `/airports/`), routes, library deps.
 - `index.html` — UI5 bootstrap + Leaflet (deferred).
 - `controller/` — `BaseController.js` + one controller per view.
 - `view/` — XML views + fragments (`SearchResults.fragment.xml`, `LocationPopover.fragment.xml`).
-- `util/` — `constants.js`, `formatters.js`, `searchFilter.js`, `Aggregate.js`.
+- `util/` — `constants.js`, `formatters.js`, `searchFilter.js`, `Aggregate.js`, `datePresets.js`.
 - `i18n/i18n.properties` — all UI texts (bind with `{i18n>key}`; in controllers
   `this.getResourceBundle().getText("key")`).
 
-`srv/`, `db/`, `xs-security.json`, `mta.yaml`, `approuter/` — **backend team's area; do not edit.**
+### Backend — `srv/`, `db/`, security, deploy
+- `srv/*-service.cds` + `*-service.js` — CAP services. `people` / `airports` / `airlines` /
+  `trips` proxy the TripPin OData V4 service; `user-service` exposes `/user/whoami()` for
+  role-gating. (Behaviour detailed under "Backend services (CAP)".)
+- `srv/external/TripPin.{cds,xml}` — imported TripPin metadata; the reference for TripPin
+  field/relation names.
+- `db/schema.cds` — the CAP data model: `TripExtension` (key `tripId` + `personUserName`;
+  `approvalStatus` + audit fields; the `company`/`team`/`notes` columns still exist but are
+  **unused by the current UI**).
+- `xs-security.json` — XSUAA role templates / scopes (TravelCoordinator, TeamLead, HR).
+- `mta.yaml`, `approuter/` — BTP Cloud Foundry deploy (approuter + XSUAA + Destination Service).
 
 ## Commands & local run
 
@@ -130,6 +148,8 @@ it live so approve/reject/submit reflect immediately.
   methods so XML `formatter: '.formatEmails'` bindings resolve).
 - `util/searchFilter.js` — one client-side contains-filter (Employees, Airports, global search).
   Filtering is client-side over the cached sets.
+- `util/datePresets.js` — `rangeFor(key)` → `{from,to}` (or `null` = all-time) for the
+  period quick-select buttons; relative to today, shared by Overview + Employee detail.
 
 ### Cross-cutting gotchas
 - **`layoutData` aggregation namespace must match its parent's** in XML views: `<core:layoutData>`
@@ -145,9 +165,12 @@ it live so approve/reject/submit reflect immediately.
 ## Implemented features (current state)
 
 **Overview** (`Overview.view/controller`) — landing page.
-- Period `DateRangeSelection`: Trips, Budget, Top Travellers, Top Airlines, Top Routes recompute
-  for the chosen range (from cached data, no network); entity counts stay constant; empty =
-  all-time.
+- Period `DateRangeSelection` + quick-preset buttons (All time · Last month · Last 3 months ·
+  Last year, via `util/datePresets.js`): Trips, Budget, Top Travellers, Top Airlines, Top Routes
+  recompute for the chosen range (from cached data, no network); entity counts stay constant;
+  empty = all-time. The active preset is highlighted (`view>/preset`); editing the range manually
+  clears it. NB: TripPin dates are ~2014, so the *relative* presets are usually empty on the demo
+  data — **All time** is what shows everything.
 - 5 KPI tiles (`GenericTile`/`NumericContent`, grow to fill the row): employees, trips, total
   budget, airports, airlines.
 - Top Travellers (`sap.f.Card` list) + Top Airlines and Top Routes as **`ComparisonMicroChart`**
@@ -162,7 +185,8 @@ it live so approve/reject/submit reflect immediately.
 **Employee detail** (`EmployeeDetail.view/controller`).
 - Large name header (`sap.m.Title titleStyle="H1"`) + email/city (no username).
 - Three trip-counter tiles: Total / Upcoming / Completed (over the person's full trip set).
-- Trips table with a period `DateRangeSelection`; a **"Locate on date"** button opens
+- Trips table with a period `DateRangeSelection` + the same quick-preset buttons as Overview
+  (`util/datePresets.js`, active preset in `detail>/preset`); a **"Locate on date"** button opens
   `LocationPopover.fragment.xml` (a `DatePicker` → where the person was that day: on a trip / at
   home).
 
@@ -187,41 +211,61 @@ it live so approve/reject/submit reflect immediately.
 - Cross-nav: a flight's From/To Link → `airports/{iata}` focuses the map and opens that detail.
 
 **Global search** (`App.controller` + `SearchResults.fragment.xml`).
-- ShellBar `SearchManager` → a grouped results dialog across employees/airports/airlines
-  (client-side over cached data). Click: employee → detail, airport → focus, airline → toast.
+- ShellBar `SearchManager` → a grouped results dialog across **employees and airports**
+  (client-side over cached data). Click: employee → detail, airport → focus. Airlines are
+  **not** searchable — there is no airline detail page to navigate to.
 
 ## Data caveats (TripPin reality — worth stating in the demo)
 
 - **TripPin is a public, writable demo service and is polluted** by other people's test accounts
   (`Jdbc*`, sometimes with **duplicate keys**). Duplicate keys make the UI5 OData V4 model reject
   the whole `/People` collection ("data not loading"). The People proxy sanitises this (see
-  Backend note).
+  "What the frontend wants from the backend").
 - **Trip dates are mostly historical (~2014)**, so employee Status and the trip counters skew to
   *Available / Completed*, and the Overview period filter needs a **wide** range to show data.
 - **Flights (`PlanItems`) exist only on some trip copies.** Shared trips reconcile this via the
   `ShareId` flight-borrow above.
 - Aggregates (top airlines/routes, airport stats) reflect the **loaded** set.
 
-## Backend (other team's area — context only; do not modify)
+## Backend services (CAP)
 
-Four proxy services (people/airports/airlines/trips) forwarding to TripPin, plus:
+Owned by the backend side; the frontend consumes these as four named OData V4 models. Four proxy
+services (people/airports/airlines/trips) forward to TripPin, plus:
 - `srv/user-service.{cds,js}` — `/user/whoami()` returning `{ id, roles[] }`; the frontend reads
   it for role-gating.
-- `TripExtension` (CAP DB, key `personUserName + tripId`) — holds `approvalStatus` (the frontend
-  uses only this now); `TripsService.approve` / `rejectTrip` actions update it.
-- `srv/trips-service.js` — a `PlanItems` handler returning flattened flight rows.
-- **One historical exception (flagged for the backend team):** `srv/people-service.js` dedupes
-  `/People` by `UserName` and drops `Jdbc*` junk, because TripPin's duplicate keys otherwise crash
-  the UI5 model. This is the only backend change; **no further backend changes are planned.**
+- `TripExtension` (CAP DB, key `personUserName + tripId`) — the frontend uses only
+  `approvalStatus`; `TripsService.approve` / `rejectTrip` actions update it.
+- `srv/trips-service.js` — a `PlanItems` handler returning flattened flight rows
+  (`fromIata/Name/City`, `toIata/Name/City`, airline, times, seat).
+- `srv/people-service.js` — the `/People` READ dedupes by `UserName` and drops `Jdbc*` junk so
+  TripPin's duplicate keys don't crash the UI5 V4 model (see the next section).
+
+## What the frontend wants from the backend
+
+The handoff list — things the UI needs (or would need) from the CAP layer that the frontend
+cannot do on its own. The frontend does not edit `srv/`, `db/`, or `xs-security.json` itself;
+it raises items here.
+
+- **People de-duplication (live; required).** TripPin is polluted with third-party test accounts
+  (`Jdbc*`) and sometimes **duplicate `UserName` keys**, which makes the UI5 OData V4 model reject
+  the entire `/People` collection ("data not loading"). The fix lives in `srv/people-service.js`
+  (filter `Jdbc*` + dedupe by `UserName`). **Keep it** — without it the dashboard cannot load
+  people. This stays an owned backend behaviour.
+- **Per-employee Company/Team store (parked).** If the dropped "company/team on the employee"
+  feature is revived, it needs a backend table (e.g. a `PersonExtension` keyed on
+  `personUserName`) for CAP to CRUD; there is no such store today.
+- **Persisting coordinator-created trips ("Add trip") (parked).** Letting a coordinator create a
+  trip in our own DB needs a backend store; not built.
 
 ## Out of scope / decisions
 
 - Writing to TripPin; Events / unused TripPin data; real-time updates; a Trips landing tab;
   mobile-first (desktop primary, but stay responsive).
 - **Company/Team on trips** — removed. Approval is the only trip metadata. Company/team were
-  considered as *per-employee* fields but that needs a backend store, which is **not built**
-  (no more backend work).
-- **"Add trip"** (a coordinator creating a trip in our own DB) — not built (needs backend).
+  considered as *per-employee* fields but that needs a backend store that is **not built** (see
+  "What the frontend wants from the backend").
+- **"Add trip"** (a coordinator creating a trip in our own DB) — not built; needs a backend store
+  (same section).
 - BTP serving of the UI (approuter html5/static module) — backend/deploy team's concern.
 
 ## Working style

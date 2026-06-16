@@ -34,12 +34,13 @@ sap.ui.define([
         // met Overview/Employees/Airports (geen extra requests).
         _ensureSearchData: function () {
             var oComponent = this.getOwnerComponent();
+            // alleen entiteiten met een doelpagina → airlines zijn weggelaten (geen
+            // airline-detail om naartoe te navigeren)
             return Promise.all([
                 oComponent.getCachedList("people", "/People"),
-                oComponent.getCachedList("airports", "/Airports"),
-                oComponent.getCachedList("airlines", "/Airlines")
+                oComponent.getCachedList("airports", "/Airports")
             ]).then(function (aResults) {
-                return { people: aResults[0], airports: aResults[1], airlines: aResults[2] };
+                return { people: aResults[0], airports: aResults[1] };
             });
         },
 
@@ -73,27 +74,15 @@ sap.ui.define([
                         icon: "sap-icon://flight"
                     };
                 });
-                var aAln = searchFilter.filter(oData.airlines, sQuery, function (a) {
-                    return [a.Name, a.AirlineCode];
-                }).slice(0, 8).map(function (a) {
-                    return {
-                        type: "airline",
-                        title: a.Name,
-                        desc: a.AirlineCode,
-                        key: a.AirlineCode,
-                        icon: "sap-icon://globe"
-                    };
-                });
-
-                if (!aEmp.length && !aApt.length && !aAln.length) {
+                if (!aEmp.length && !aApt.length) {
                     MessageToast.show(that.getResourceBundle().getText("globalSearchNoResults"));
                     return;
                 }
 
                 var oSearchModel = new JSONModel({
                     query: sQuery,
-                    employees: aEmp, airports: aApt, airlines: aAln,
-                    empCount: aEmp.length, airportCount: aApt.length, airlineCount: aAln.length
+                    employees: aEmp, airports: aApt,
+                    empCount: aEmp.length, airportCount: aApt.length
                 });
                 that._openSearchDialog(oSearchModel);
             });
@@ -130,9 +119,6 @@ sap.ui.define([
                 oRouter.navTo("employee", { userName: oItem.key });
             } else if (oItem.type === "airport") {
                 oRouter.navTo("airportFocus", { iata: oItem.key });
-            } else {
-                // geen airline-detailpagina → informatief
-                MessageToast.show(this.getResourceBundle().getText("airlineInfo", [oItem.title, oItem.key]));
             }
         },
 

@@ -40,21 +40,6 @@
                     press=".onSearchItemPress" />
             </List>
 
-            <List mode="None" items="{search>/airlines}" showNoData="false" class="sapUiSmallMarginTop">
-                <headerToolbar>
-                    <Toolbar>
-                        <Title text="{i18n>searchGroupAirlines} ({search>/airlineCount})" level="H3" />
-                    </Toolbar>
-                </headerToolbar>
-                <StandardListItem
-                    type="Active"
-                    title="{search>title}"
-                    description="{search>desc}"
-                    icon="{search>icon}"
-                    iconDensityAware="false"
-                    press=".onSearchItemPress" />
-            </List>
-
         </VBox>
 
         <beginButton>

@@ -2,6 +2,7 @@
     controllerName="primepath.dashboard.controller.EmployeeDetail"
     displayBlock="true"
     xmlns:mvc="sap.ui.core.mvc"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"
     xmlns="sap.m">
 
     <Page
@@ -55,6 +56,15 @@
                             icon="sap-icon://map"
                             text="{i18n>btnLocateOnDate}"
                             press=".onOpenLocation" />
+                        <!-- snelkeuze-knoppen; de actieve wordt benadrukt, een handmatig bereik wist ze -->
+                        <Button text="{i18n>periodAll}" app:period="all" press=".onPresetPress"
+                            type="{= ${detail>/preset} === 'all' ? 'Emphasized' : 'Transparent' }" />
+                        <Button text="{i18n>periodLastMonth}" app:period="month" press=".onPresetPress"
+                            type="{= ${detail>/preset} === 'month' ? 'Emphasized' : 'Transparent' }" />
+                        <Button text="{i18n>periodLast3Months}" app:period="quarter" press=".onPresetPress"
+                            type="{= ${detail>/preset} === 'quarter' ? 'Emphasized' : 'Transparent' }" />
+                        <Button text="{i18n>periodLastYear}" app:period="year" press=".onPresetPress"
+                            type="{= ${detail>/preset} === 'year' ? 'Emphasized' : 'Transparent' }" />
                         <DateRangeSelection
                             id="tripsRange"
                             width="18rem"

@@ -4,8 +4,9 @@ sap.ui.define([
     "sap/ui/core/format/NumberFormat",
     "sap/m/MessageToast",
     "sap/base/Log",
-    "primepath/dashboard/util/Aggregate"
-], function (BaseController, JSONModel, NumberFormat, MessageToast, Log, Aggregate) {
+    "primepath/dashboard/util/Aggregate",
+    "primepath/dashboard/util/datePresets"
+], function (BaseController, JSONModel, NumberFormat, MessageToast, Log, Aggregate, datePresets) {
     "use strict";
 
     return BaseController.extend("primepath.dashboard.controller.Overview", {
@@ -14,6 +15,7 @@ sap.ui.define([
             this.getView().setModel(new JSONModel({
                 busy: true,
                 flightsBusy: true,
+                preset: "all",   // actieve snelkeuze ("" = handmatig bereik)
                 kpi: { employees: "", trips: "", budget: "", budgetScale: "", airports: "", airlines: "" },
                 topTravellers: [],
                 topAirlines: [],
@@ -68,9 +70,23 @@ sap.ui.define([
         // de gekozen periode. Entiteit-counts (employees/airports/airlines) blijven constant.
         // Leeg bereik = all-time. Herberekent uit de gecachte ruwe data — geen netwerk.
         onPeriodChange: function (oEvent) {
+            // handmatig bereik → geen snelkeuze meer actief
+            this.getView().getModel("view").setProperty("/preset", "");
             var oFrom = oEvent.getSource().getDateValue();
             var oTo = oEvent.getSource().getSecondDateValue();
             this._applyPeriod((oFrom && oTo) ? { from: oFrom, to: oTo } : null);
+        },
+
+        // snelkeuze-knop: vult de DateRangeSelection (programmatisch → vuurt geen change)
+        // en herberekent meteen. "all" wist het bereik.
+        onPresetPress: function (oEvent) {
+            var sKey = oEvent.getSource().data("period");
+            var oRange = datePresets.rangeFor(sKey);
+            this.getView().getModel("view").setProperty("/preset", sKey);
+            var oPicker = this.byId("overviewPeriod");
+            oPicker.setDateValue(oRange ? oRange.from : null);
+            oPicker.setSecondDateValue(oRange ? oRange.to : null);
+            this._applyPeriod(oRange);
         },
 
         _applyPeriod: function (oRange) {

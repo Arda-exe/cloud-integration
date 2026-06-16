@@ -34,63 +34,60 @@
                 </layoutData>
                 <content>
                     <VBox class="sapUiSmallMargin">
-                        <HBox justifyContent="Center" alignItems="Center" class="sapUiSmallMarginBottom">
-                            <VBox alignItems="Center">
-                                <Title text="{trip>/route/fromIata}" level="H2" />
-                                <Text text="{trip>/route/fromName}" textAlign="Center" />
-                            </VBox>
-                            <core:Icon src="sap-icon://flight" size="2rem" class="sapUiLargeMarginBegin sapUiLargeMarginEnd" />
-                            <VBox alignItems="Center">
-                                <Title text="{trip>/route/toIata}" level="H2" />
-                                <Text text="{trip>/route/toName}" textAlign="Center" />
-                            </VBox>
-                        </HBox>
+                        <!-- volledig traject: alle stops in volgorde (retour wordt zichtbaar) -->
+                        <FlexBox wrap="Wrap" justifyContent="Center" alignItems="Center"
+                            class="sapUiSmallMarginBottom" items="{trip>/route/stops}">
+                            <HBox alignItems="Center">
+                                <core:Icon src="sap-icon://flight" size="1.5rem"
+                                    visible="{trip>showArrow}"
+                                    class="sapUiMediumMarginBegin sapUiMediumMarginEnd" />
+                                <VBox alignItems="Center">
+                                    <Title text="{trip>iata}" level="H2" />
+                                    <Text text="{trip>name}" textAlign="Center" />
+                                </VBox>
+                            </HBox>
+                        </FlexBox>
 
-                        <FlexBox wrap="Wrap" justifyContent="Center">
+                        <!-- één feiten-kaart per unieke luchthaven -->
+                        <FlexBox wrap="Wrap" justifyContent="Center" items="{trip>/route/airports}">
                             <f:Card width="20rem" class="sapUiSmallMargin">
                                 <f:header>
-                                    <card:Header title="{trip>/route/fromName}" subtitle="{i18n>routeDeparture}" iconSrc="sap-icon://journey-depart" />
+                                    <card:Header title="{trip>name}" subtitle="{trip>iata}" iconSrc="sap-icon://map-3" />
                                 </f:header>
                                 <f:content>
                                     <VBox class="sapUiSmallMargin">
                                         <HBox class="sapUiTinyMarginBottom">
                                             <Label text="{i18n>lblCity}" width="9rem" />
-                                            <Text text="{trip>/route/fromCity}" />
+                                            <Text text="{trip>city}" />
                                         </HBox>
                                         <HBox class="sapUiTinyMarginBottom">
                                             <Label text="{i18n>lblCoordinates}" width="9rem" />
-                                            <Text text="{trip>/route/fromCoords}" />
+                                            <Text text="{trip>coords}" />
                                         </HBox>
                                         <HBox>
                                             <Label text="{i18n>lblTripsViaAirport}" width="9rem" />
-                                            <Text text="{trip>/route/fromTrips}" />
-                                        </HBox>
-                                    </VBox>
-                                </f:content>
-                            </f:Card>
-
-                            <f:Card width="20rem" class="sapUiSmallMargin">
-                                <f:header>
-                                    <card:Header title="{trip>/route/toName}" subtitle="{i18n>routeArrival}" iconSrc="sap-icon://journey-arrive" />
-                                </f:header>
-                                <f:content>
-                                    <VBox class="sapUiSmallMargin">
-                                        <HBox class="sapUiTinyMarginBottom">
-                                            <Label text="{i18n>lblCity}" width="9rem" />
-                                            <Text text="{trip>/route/toCity}" />
-                                        </HBox>
-                                        <HBox class="sapUiTinyMarginBottom">
-                                            <Label text="{i18n>lblCoordinates}" width="9rem" />
-                                            <Text text="{trip>/route/toCoords}" />
-                                        </HBox>
-                                        <HBox>
-                                            <Label text="{i18n>lblTripsViaAirport}" width="9rem" />
-                                            <Text text="{trip>/route/toTrips}" />
+                                            <Text text="{trip>trips}" />
                                         </HBox>
                                     </VBox>
                                 </f:content>
                             </f:Card>
                         </FlexBox>
+                    </VBox>
+                </content>
+            </Panel>
+
+            <!-- geen vluchten in TripPin voor deze trip → nette lege staat i.p.v. een
+                 verdwijnende routeblok / leeg gat (alleen tonen zodra het laden klaar is) -->
+            <Panel headerText="{i18n>routeTitle}" class="sapUiSmallMarginBeginEnd"
+                visible="{= !${trip>/route/has} &amp;&amp; !${trip>/flightsBusy} }">
+                <layoutData>
+                    <FlexItemData growFactor="2" baseSize="42rem" />
+                </layoutData>
+                <content>
+                    <VBox alignItems="Center" justifyContent="Center" height="12rem" class="sapUiMediumMargin">
+                        <core:Icon src="sap-icon://flight" size="3rem" class="sapUiMediumMarginBottom" />
+                        <Title text="{i18n>noFlightsTitle}" level="H3" textAlign="Center" />
+                        <Text text="{i18n>noFlightsText}" textAlign="Center" class="sapUiTinyMarginTop" />
                     </VBox>
                 </content>
             </Panel>
@@ -133,7 +130,8 @@
                 </content>
             </Panel>
 
-            <Panel headerText="{i18n>flightsTitle}" class="sapUiSmallMarginBeginEnd sapUiSmallMarginBottom">
+            <Panel headerText="{i18n>flightsTitle}" class="sapUiSmallMarginBeginEnd sapUiSmallMarginBottom"
+                visible="{= ${trip>/route/has} || ${trip>/flightsBusy} }">
                 <content>
                     <Table
                         id="flightsTable"

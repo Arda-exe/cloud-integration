@@ -5,6 +5,7 @@
     xmlns:f="sap.f"
     xmlns:card="sap.f.cards"
     xmlns:mc="sap.suite.ui.microchart"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"
     xmlns="sap.m">
 
     <Page showHeader="false">
@@ -14,6 +15,15 @@
                 <OverflowToolbar class="sapUiSmallMarginBottom">
                     <Title text="{i18n>overviewPeriodTitle}" />
                     <ToolbarSpacer />
+                    <!-- snelkeuze-knoppen; de actieve wordt benadrukt, een handmatig bereik wist ze -->
+                    <Button text="{i18n>periodAll}" app:period="all" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'all' ? 'Emphasized' : 'Transparent' }" />
+                    <Button text="{i18n>periodLastMonth}" app:period="month" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'month' ? 'Emphasized' : 'Transparent' }" />
+                    <Button text="{i18n>periodLast3Months}" app:period="quarter" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'quarter' ? 'Emphasized' : 'Transparent' }" />
+                    <Button text="{i18n>periodLastYear}" app:period="year" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'year' ? 'Emphasized' : 'Transparent' }" />
                     <DateRangeSelection
                         id="overviewPeriod"
                         width="18rem"

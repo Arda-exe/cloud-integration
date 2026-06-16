@@ -19,7 +19,7 @@ sap.ui.define([
                 trips: [],
                 locationText: "",
                 busy: false,
-                preset: "all",   // actieve snelkeuze ("" = handmatig bereik)
+                preset: "all",
                 counts: { total: 0, upcoming: 0, completed: 0 }
             }), "detail");
             this.getRouter().getRoute("employee")
@@ -30,13 +30,11 @@ sap.ui.define([
             var sUserName = oEvent.getParameter("arguments").userName;
             this._sUserName = sUserName;
 
-            // OData escapet een ' in een string-literal door verdubbeling
             var sKey = encodeURIComponent(sUserName.replace(/'/g, "''"));
             this.getView().bindElement({
                 path: "people>/People('" + sKey + "')"
             });
 
-            // UI-state resetten bij wissel van persoon
             this._aAllTrips = [];
             this.byId("tripsRange").setDateValue(null);
             this.byId("tripsRange").setSecondDateValue(null);
@@ -54,17 +52,11 @@ sap.ui.define([
             var oDetail = this.getView().getModel("detail");
             oDetail.setProperty("/busy", true);
 
-            // trips uit de app-brede cache (gedeeld met Overview/TripDetail)
             this.getOwnerComponent().getCachedTrips(sUserName).then(function (aTrips) {
-                if (that._sUserName !== sUserName) {
-                    return; // intussen naar een andere persoon genavigeerd
-                }
-                // kopie vóór sort — gedeelde cache-array niet muteren; ISO-strings
-                // sorteren correct als tekst (chronologisch)
+                if (that._sUserName !== sUserName) { return; }
                 that._aAllTrips = aTrips.slice().sort(function (a, b) {
                     return a.StartsAt < b.StartsAt ? -1 : 1;
                 });
-                // tellers over ALLE trips van de persoon (niet de periode-gefilterde lijst)
                 oDetail.setProperty("/counts", that._computeCounts(that._aAllTrips));
                 that._applyDateRange();
                 oDetail.setProperty("/busy", false);
@@ -75,8 +67,6 @@ sap.ui.define([
             });
         },
 
-        // Total / Upcoming (start in de toekomst) / Completed (einde in het verleden) t.o.v. nu.
-        // Een lopende trip (start <= nu <= einde) telt mee in Total maar niet in Upcoming/Completed.
         _computeCounts: function (aTrips) {
             var iNow = Date.now();
             var iUpcoming = 0;
@@ -92,13 +82,10 @@ sap.ui.define([
         },
 
         onDateRangeChange: function () {
-            // handmatig bereik → geen snelkeuze meer actief
             this.getView().getModel("detail").setProperty("/preset", "");
             this._applyDateRange();
         },
 
-        // snelkeuze-knop: vult de DateRangeSelection (programmatisch → vuurt geen change)
-        // en filtert meteen. "all" wist het bereik.
         onPresetPress: function (oEvent) {
             var sKey = oEvent.getSource().data("period");
             var oRange = datePresets.rangeFor(sKey);
@@ -119,7 +106,6 @@ sap.ui.define([
                 var iFrom = oFrom.getTime();
                 var iTo = oTo.getTime() + constants.MS_PER_DAY - 1;
                 aTrips = aTrips.filter(function (oTrip) {
-                    // een trip telt mee zodra hij de gekozen periode overlapt
                     return new Date(oTrip.EndsAt).getTime() >= iFrom
                         && new Date(oTrip.StartsAt).getTime() <= iTo;
                 });
@@ -127,8 +113,6 @@ sap.ui.define([
             this.getView().getModel("detail").setProperty("/trips", aTrips);
         },
 
-        // "Locate on date" achter een knop → kleine popover (geen tweede zichtbaar datumveld
-        // naast de trips-periodefilter). Start telkens leeg.
         onOpenLocation: function (oEvent) {
             var that = this;
             var oButton = oEvent.getSource();
@@ -182,6 +166,10 @@ sap.ui.define([
 
         onTripPress: function (oEvent) {
             var oTrip = oEvent.getSource().getBindingContext("detail").getObject();
+            if (oTrip._isOwn) {
+                MessageToast.show("Eigen trip: " + oTrip.Name);
+                return;
+            }
             this.getRouter().navTo("trip", {
                 userName: this._sUserName,
                 tripId: oTrip.TripId
@@ -200,9 +188,7 @@ sap.ui.define([
         },
 
         formatEmails: formatters.formatEmails,
-
         formatCity: formatters.formatCity,
-
         formatPeriod: formatters.formatPeriod
     });
 });

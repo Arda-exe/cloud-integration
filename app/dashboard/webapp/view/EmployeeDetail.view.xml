@@ -56,7 +56,6 @@
                             icon="sap-icon://map"
                             text="{i18n>btnLocateOnDate}"
                             press=".onOpenLocation" />
-                        <!-- snelkeuze-knoppen; de actieve wordt benadrukt, een handmatig bereik wist ze -->
                         <Button text="{i18n>periodAll}" app:period="all" press=".onPresetPress"
                             type="{= ${detail>/preset} === 'all' ? 'Emphasized' : 'Transparent' }" />
                         <Button text="{i18n>periodLastMonth}" app:period="month" press=".onPresetPress"
@@ -74,17 +73,16 @@
                 </headerToolbar>
 
                 <columns>
-                    <Column>
-                        <Text text="{i18n>colTrip}" />
-                    </Column>
-                    <Column>
-                        <Text text="{i18n>colPeriod}" />
-                    </Column>
+                    <Column><Text text="{i18n>colTrip}" /></Column>
+                    <Column><Text text="{i18n>colPeriod}" /></Column>
                     <Column hAlign="End" minScreenWidth="Tablet" demandPopin="true">
                         <Text text="{i18n>colBudget}" />
                     </Column>
                     <Column minScreenWidth="Desktop" demandPopin="true">
                         <Text text="{i18n>colDescription}" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="Bron" />
                     </Column>
                 </columns>
 
@@ -95,6 +93,9 @@
                             <Text text="{parts: ['detail>StartsAt', 'detail>EndsAt'], formatter: '.formatPeriod'}" />
                             <ObjectNumber number="{detail>Budget}" unit="USD" />
                             <Text text="{detail>Description}" maxLines="2" />
+                            <ObjectStatus
+                                text="{= ${detail>_isOwn} ? 'Eigen' : 'TripPin' }"
+                                state="{= ${detail>_isOwn} ? 'Success' : 'None' }" />
                         </cells>
                     </ColumnListItem>
                 </items>

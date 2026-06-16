@@ -63,8 +63,7 @@
             "libs": {
                 "sap.ui.core": {},
                 "sap.m": {},
-                "sap.f": {},
-                "sap.suite.ui.microchart": {}
+                "sap.f": {}
             }
         },
         "contentDensities": {

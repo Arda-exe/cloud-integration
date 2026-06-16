@@ -39,8 +39,9 @@ never built).
   Tab dashboard (Overview · Employees · Airports) with heavy cross-navigation. UI5 **1.136** from
   the CDN (`https://ui5.sap.com/1.136/`), theme `sap_fiori_3`. Follow Fiori guidelines (sap.m /
   sap.f controls) so it looks like an SAP app.
-- **UI5 libraries used** (`manifest.json` deps): `sap.ui.core`, `sap.m`, `sap.f`,
-  `sap.suite.ui.microchart` (Overview charts). **Leaflet/OpenStreetMap** (loaded from CDN in
+- **UI5 libraries used** (`manifest.json` deps): `sap.ui.core`, `sap.m`, `sap.f`. (The Overview
+  Top Airlines/Routes charts are plain `sap.m.ProgressIndicator` bars, so `sap.suite.ui.microchart`
+  is no longer a dependency.) **Leaflet/OpenStreetMap** (loaded from CDN in
   `index.html`) is used for the airport map because `sap.ui.vbm`/GeoMap is not in the 1.136 CDN.
 - **Local DB:** SQLite · **Prod DB:** SAP HANA Cloud.
 - **External data:** TripPin — `https://services.odata.org/V4/TripPinService`.
@@ -170,7 +171,9 @@ it live so approve/reject/submit reflect immediately.
 - **Leaflet:** map div lives in a `sap.ui.core.HTML` control; GeoJSON is `[lon, lat]` → flip to
   `[lat, lon]`. Call `map.invalidateSize()` (next tick) when the tab is re-shown after being
   hidden, else tiles render grey.
-- **ComparisonMicroChart** needs a container with a definite height (`size="Responsive"`).
+- **Overview bar charts** are `sap.m.ProgressIndicator` rows (one per airline/route, `percentValue`
+  = share of the busiest) inside a fixed-height `sap.f.Card` wrapped in a `ScrollContainer`, so the
+  full (uncapped) airline/route lists scroll. Airlines with 0 flights show an empty bar.
 - **Responsive cards/tiles** fill wide screens via `FlexItemData growFactor` + `baseSize`.
 - **Role gating:** coordinator-only UI binds `visible="{app>/user/isCoordinator}"`.
 
@@ -195,9 +198,10 @@ launchpad is bypassed (role comes from the XSUAA user). No backend change — se
   data — **All time** is what shows everything.
 - 5 KPI tiles (`GenericTile`/`NumericContent`, grow to fill the row): employees, trips, total
   budget, airports, airlines.
-- Top Travellers (`sap.f.Card` list) + Top Airlines and Top Routes as **`ComparisonMicroChart`**
-  (horizontal bar charts). All three cards grow responsively. Progressive load: tiles + travellers
-  first, charts after the flight burst (own busy indicator).
+- Top Travellers (`sap.f.Card` list) + Top Airlines and Top Routes as **`sap.m.ProgressIndicator`
+  bars** (horizontal bar charts; **all** airlines/routes, scrollable, equal-height cards; airlines
+  with 0 flights are listed too). All three cards grow responsively. Progressive load: tiles +
+  travellers first, charts after the flight burst (own busy indicator).
 
 **Employees** (`Employees.view/controller`).
 - Searchable table (name/username/email, client-side) + a **Status filter** (`Select`) and a

@@ -272,7 +272,7 @@ sap.ui.define([
                 mSeen[sIata] = true;
                 var h = mHint[sIata] || {};
                 var oFacts = that._airportFacts(sIata, h.name, h.city, mByIata);
-                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city, coords: oFacts.coords, trips: sNone });
+                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city, trips: sNone });
             });
             oModel.setProperty("/route", { has: true, stops: aStops, airports: aAirports });
         },
@@ -281,17 +281,10 @@ sap.ui.define([
             var oAirport = mByIata[(sIata || "").toUpperCase()];
             var sName = (oAirport && oAirport.Name) || sFlightName || sIata || "";
             var sCity = sFlightCity || "";
-            var sCoords = "";
-            if (oAirport && oAirport.Location) {
-                if (oAirport.Location.City) {
-                    sCity = oAirport.Location.City.Name + (oAirport.Location.City.CountryRegion ? ", " + oAirport.Location.City.CountryRegion : "");
-                }
-                var oLoc = oAirport.Location.Loc;
-                if (oLoc && oLoc.coordinates) {
-                    sCoords = oLoc.coordinates[1].toFixed(4) + ", " + oLoc.coordinates[0].toFixed(4);
-                }
+            if (oAirport && oAirport.Location && oAirport.Location.City) {
+                sCity = oAirport.Location.City.Name + (oAirport.Location.City.CountryRegion ? ", " + oAirport.Location.City.CountryRegion : "");
             }
-            return { name: sName, city: sCity, coords: sCoords };
+            return { name: sName, city: sCity };
         },
 
         _loadAirportTripCounts: function () {

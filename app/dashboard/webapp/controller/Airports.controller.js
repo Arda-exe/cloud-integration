@@ -100,6 +100,8 @@ sap.ui.define([
             var aCoords = oLoc.coordinates;
             var aLatLng = [aCoords[1], aCoords[0]];
                 var oMarker = window.L.marker(aLatLng)
+                    // hover toont meteen de naam (tooltip); klik opent de popup met meer detail
+                    .bindTooltip(oAirport.Name, { direction: "top" })
                     .bindPopup("<b>" + oAirport.Name + "</b><br>"
                         + oAirport.IataCode + " &middot; " + oAirport.Location.City.Name)
                     .addTo(oMap);
@@ -189,13 +191,7 @@ sap.ui.define([
 
         _selectAirport: function (oAirport) {
             var oVM = this.getView().getModel("view");
-            var oLoc = oAirport.Location && oAirport.Location.Loc;
             var oCity = oAirport.Location && oAirport.Location.City;
-            var sCoords = "";
-            if (oLoc && oLoc.coordinates) {
-                // GeoJSON [lon, lat] → toon "lat, lon"
-                sCoords = oLoc.coordinates[1].toFixed(4) + ", " + oLoc.coordinates[0].toFixed(4);
-            }
             oVM.setProperty("/selected", {
                 has: true,
                 busy: true,
@@ -204,7 +200,6 @@ sap.ui.define([
                 icao: oAirport.IcaoCode,
                 city: oCity ? oCity.Name : "",
                 country: oCity ? oCity.CountryRegion : "",
-                coords: sCoords,
                 trafficText: "",
                 trafficState: "None",
                 flights: 0,

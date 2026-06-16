@@ -188,8 +188,12 @@ sap.ui.define([
         getFlightAggregate: function () {
             var that = this;
             if (!this._pFlightAgg) {
-                this._pFlightAgg = this.getFlightData().then(function (oRaw) {
-                    return Aggregate.aggregate(oRaw, null);
+                // airlines-lijst meenemen zodat de Overview ook airlines zónder vluchten toont
+                this._pFlightAgg = Promise.all([
+                    this.getFlightData(),
+                    this.getCachedList("airlines", "/Airlines")
+                ]).then(function (aResults) {
+                    return Aggregate.aggregate(aResults[0], null, aResults[1]);
                 }).catch(function (oError) {
                     that._pFlightAgg = null;
                     throw oError;

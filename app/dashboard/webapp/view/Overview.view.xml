@@ -4,7 +4,6 @@
     xmlns:mvc="sap.ui.core.mvc"
     xmlns:f="sap.f"
     xmlns:card="sap.f.cards"
-    xmlns:mc="sap.suite.ui.microchart"
     xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"
     xmlns="sap.m">
 
@@ -74,8 +73,9 @@
                     </GenericTile>
                 </FlexBox>
 
-                <FlexBox wrap="Wrap">
-                    <f:Card class="sapUiSmallMargin">
+                <!-- drie even hoge kaarten (24rem); de inhoud scrollt als ze overloopt -->
+                <FlexBox wrap="Wrap" alignItems="Stretch">
+                    <f:Card height="24rem" class="sapUiSmallMargin">
                         <f:layoutData>
                             <FlexItemData growFactor="1" baseSize="22rem" />
                         </f:layoutData>
@@ -83,17 +83,19 @@
                             <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
                         </f:header>
                         <f:content>
-                            <List items="{view>/topTravellers}" showSeparators="Inner">
-                                <StandardListItem
-                                    title="{view>name}"
-                                    info="{view>tripsLabel}"
-                                    icon="sap-icon://customer"
-                                    iconDensityAware="false" />
-                            </List>
+                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+                                <List items="{view>/topTravellers}" showSeparators="Inner">
+                                    <StandardListItem
+                                        title="{view>name}"
+                                        info="{view>tripsLabel}"
+                                        icon="sap-icon://customer"
+                                        iconDensityAware="false" />
+                                </List>
+                            </ScrollContainer>
                         </f:content>
                     </f:Card>
 
-                    <f:Card height="20rem" class="sapUiSmallMargin"
+                    <f:Card height="24rem" class="sapUiSmallMargin"
                         busy="{view>/flightsBusy}" busyIndicatorDelay="100">
                         <f:layoutData>
                             <FlexItemData growFactor="1" baseSize="22rem" />
@@ -102,21 +104,26 @@
                             <card:Header title="{i18n>topAirlinesTitle}" iconSrc="sap-icon://flight" />
                         </f:header>
                         <f:content>
-                            <mc:ComparisonMicroChart
-                                size="Responsive"
-                                width="100%"
-                                class="sapUiSmallMargin"
-                                data="{view>/topAirlines}">
-                                <mc:ComparisonMicroChartData
-                                    title="{view>name}"
-                                    value="{view>count}"
-                                    displayValue="{view>info}"
-                                    color="Good" />
-                            </mc:ComparisonMicroChart>
+                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+                                <!-- één balk per airline; relatief t.o.v. de drukste (percent),
+                                     airlines met 0 vluchten tonen een lege balk + "0 flights" -->
+                                <VBox class="sapUiSmallMargin" items="{view>/topAirlines}">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Label text="{view>name}" design="Bold" />
+                                        <ProgressIndicator
+                                            class="sapUiTinyMarginTop"
+                                            percentValue="{view>percent}"
+                                            displayValue="{view>info}"
+                                            showValue="true"
+                                            state="Success"
+                                            height="1.25rem" />
+                                    </VBox>
+                                </VBox>
+                            </ScrollContainer>
                         </f:content>
                     </f:Card>
 
-                    <f:Card height="20rem" class="sapUiSmallMargin"
+                    <f:Card height="24rem" class="sapUiSmallMargin"
                         busy="{view>/flightsBusy}" busyIndicatorDelay="100">
                         <f:layoutData>
                             <FlexItemData growFactor="1" baseSize="22rem" />
@@ -125,17 +132,20 @@
                             <card:Header title="{i18n>topRoutesTitle}" iconSrc="sap-icon://journey-arrive" />
                         </f:header>
                         <f:content>
-                            <mc:ComparisonMicroChart
-                                size="Responsive"
-                                width="100%"
-                                class="sapUiSmallMargin"
-                                data="{view>/topRoutes}">
-                                <mc:ComparisonMicroChartData
-                                    title="{view>name}"
-                                    value="{view>count}"
-                                    displayValue="{view>info}"
-                                    color="Neutral" />
-                            </mc:ComparisonMicroChart>
+                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+                                <VBox class="sapUiSmallMargin" items="{view>/topRoutes}">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Label text="{view>name}" design="Bold" />
+                                        <ProgressIndicator
+                                            class="sapUiTinyMarginTop"
+                                            percentValue="{view>percent}"
+                                            displayValue="{view>info}"
+                                            showValue="true"
+                                            state="Information"
+                                            height="1.25rem" />
+                                    </VBox>
+                                </VBox>
+                            </ScrollContainer>
                         </f:content>
                     </f:Card>
                 </FlexBox>

@@ -10,14 +10,28 @@ sap.ui.define([
     return BaseController.extend("primepath.dashboard.controller.App", {
 
         onInit: function () {
-            // route names en tab keys zijn identiek (overview/employees/airports),
-            // dus de route-naam kan rechtstreeks als selectedKey dienen
+            // route names en tab keys zijn identiek (overview/employees/airports), dus de
+            // route-naam kan rechtstreeks als selectedKey dienen. De launchpad-route heeft
+            // geen tab → die wordt apart afgehandeld in onRouteMatched.
             this.getRouter()
                 .attachRouteMatched(this.onRouteMatched, this);
         },
 
         onRouteMatched: function (oEvent) {
             var sRoute = oEvent.getParameter("name");
+            var bLaunchpad = sRoute === "launchpad";
+            var oComponent = this.getOwnerComponent();
+            // tab-balk + switch-role verschijnen pas binnen de app, niet op de launchpad
+            oComponent.getModel("app").setProperty("/showChrome", !bLaunchpad);
+            if (bLaunchpad) {
+                return;   // launchpad heeft geen tab → niets selecteren
+            }
+            // lokaal nog geen rol gekozen (refresh/deep-link) → terug naar de launchpad
+            // i.p.v. een basic-auth-dialog te laten verschijnen
+            if (oComponent.needsLogin()) {
+                this.getRouter().navTo("launchpad");
+                return;
+            }
             // detail routes horen bij de tab van hun lijst
             var mRouteToTab = { employee: "employees", trip: "employees", airportFocus: "airports" };
             this.byId("tabHeader").setSelectedKey(mRouteToTab[sRoute] || sRoute);
@@ -26,6 +40,11 @@ sap.ui.define([
         onTabSelect: function (oEvent) {
             this.getRouter()
                 .navTo(oEvent.getParameter("key"));
+        },
+
+        // terug naar de launchpad om een andere rol te kiezen
+        onSwitchRole: function () {
+            this.getRouter().navTo("launchpad");
         },
 
         // ---- Global search (feature 7) -------------------------------------

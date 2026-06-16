@@ -8,6 +8,11 @@ sap.ui.define([
 ], function (UIComponent, JSONModel, Filter, FilterOperator, constants, Aggregate) {
     "use strict";
 
+    // de drie rollen, hun landingstab en (lokaal) de bijhorende mocked-auth demo-user
+    var ROLES = ["TravelCoordinator", "TeamLead", "HR"];
+    var ROLE_LANDING = { TravelCoordinator: "employees", TeamLead: "employees", HR: "overview" };
+    var ROLE_USER = { TravelCoordinator: "coordinator", TeamLead: "teamlead", HR: "hr" };
+
     return UIComponent.extend("primepath.dashboard.Component", {
         metadata: {
             manifest: "json",
@@ -28,14 +33,30 @@ sap.ui.define([
             this._pFlightAgg = null;      // gememoïseerde all-time aggregate
             this._pAirportsByIata = null; // gememoïseerde IATA -> airport index
 
-            // app-brede gebruikerscontext voor rol-gating (feature 8): tot whoami
-            // antwoordt is niemand coordinator, dus coordinator-only UI blijft verborgen
+            // lokaal (cds watch) = mocked basic-auth met de 3 demo-users; BTP = XSUAA waar de
+            // rol vastligt bij de ingelogde gebruiker. Bepaalt of de launchpad echt kan
+            // "inloggen als rol" (lokaal) of de echte rol moet volgen (BTP).
+            this._bLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+            this._sAuthHeader = null;   // gezet door loginAs (lokaal) → ook op de whoami-fetch
+
+            // app-brede gebruikerscontext voor rol-gating; showChrome verbergt de tab-balk +
+            // switch-role-knop op de launchpad. whoami wordt lokaal NIET vroeg aangeroepen
+            // (anders een basic-auth-dialog vóór de launchpad verschijnt) → pas in loginAs.
             this.setModel(new JSONModel({
-                user: { id: "", roles: [], isCoordinator: false }
+                showChrome: false,
+                user: { id: "", roles: [], isCoordinator: false, roleLabel: "" }
             }), "app");
-            this._loadCurrentUser();
 
             this.getRouter().initialize();
+
+            // BTP: een rol kan niet geklikt worden → launchpad overslaan en meteen naar de
+            // landingstab van de echte rol (whoami via de doorgestuurde XSUAA-sessie).
+            if (!this._bLocal) {
+                var that = this;
+                this._loadCurrentUser().then(function (aRoles) {
+                    that._routeToRoleLanding(aRoles || []);
+                });
+            }
         },
 
         // Volledige collectie (/People, /Airports, /Airlines), één keer per sessie geladen
@@ -193,26 +214,96 @@ sap.ui.define([
             return this._pAirportsByIata;
         },
 
-        // Haalt de rollen op via het (geïsoleerde) /user/whoami() endpoint. Same-origin,
-        // werkt lokaal (cds watch) en via de BTP approuter.
+        // Lokaal nog niet ingelogd (geen credentials gezet)? Dan sturen de app-routes terug
+        // naar de launchpad i.p.v. een basic-auth-dialog te triggeren (refresh/deep-link).
+        needsLogin: function () {
+            return this._bLocal && !this._sAuthHeader;
+        },
+
+        // Echte login als een rol (lokaal). Injecteert de basic-auth credentials van de
+        // bijhorende mock-user op de 4 OData-modellen → de backend authentiseert/autoriseert
+        // écht als die rol (bv. enkel Coordinator mag approve/reject). Zet de rolcontext en
+        // navigeert naar de landingstab. (BTP slaat de launchpad over — zie init.)
+        loginAs: function (sRole) {
+            var that = this;
+
+            if (this._bLocal && ROLE_USER[sRole]) {
+                // injecteer de basic-auth credentials op de 4 OData-modellen → de backend
+                // authentiseert/autoriseert écht als die rol
+                this._sAuthHeader = "Basic " + btoa(ROLE_USER[sRole] + ":test");
+                ["people", "trips", "airlines", "airports"].forEach(function (sName) {
+                    try {
+                        that.getModel(sName).changeHttpHeaders({ Authorization: that._sAuthHeader });
+                    } catch (e) {
+                        // changeHttpHeaders werpt bij lopende requests; bij een rolwissel is dit
+                        // zeldzaam en niet kritisch (reads zijn rol-onafhankelijk)
+                    }
+                });
+                // rolcontext zetten (lokaal is de gekozen rol leidend) → UI-gating + ShellBar
+                var oApp = this.getModel("app");
+                oApp.setProperty("/user/roles", [sRole]);
+                oApp.setProperty("/user/isCoordinator", sRole === "TravelCoordinator");
+                oApp.setProperty("/user/roleLabel", this._roleLabel([sRole]));
+                // echte identiteit/rollen bevestigen via whoami (met dezelfde credentials)
+                this._loadCurrentUser();
+            }
+            // BTP: de rolcontext van whoami (init) blijft leidend → hier enkel navigeren
+            this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
+        },
+
+        // gelokaliseerd label van de (eerst gevonden) rol, voor de ShellBar secondaryTitle
+        _roleLabel: function (aRoles) {
+            var oBundle = this.getModel("i18n").getResourceBundle();
+            for (var i = 0; i < ROLES.length; i++) {
+                if (aRoles.indexOf(ROLES[i]) !== -1) {
+                    return oBundle.getText("role" + ROLES[i] + "Title");
+                }
+            }
+            return "";
+        },
+
+        // BTP: navigeer naar de landingstab van de echte rol (Coordinator/TeamLead → Employees,
+        // HR → Overview); zonder bekende rol valt het terug op Overview.
+        _routeToRoleLanding: function (aRoles) {
+            var sLanding = "overview";
+            for (var i = 0; i < ROLES.length; i++) {
+                if (aRoles.indexOf(ROLES[i]) !== -1) {
+                    sLanding = ROLE_LANDING[ROLES[i]];
+                    break;
+                }
+            }
+            this.getRouter().navTo(sLanding);
+        },
+
+        // Haalt id + rollen op via /user/whoami(). Lokaal sturen we de basic-auth header mee
+        // (door loginAs gezet); op BTP draagt de doorgestuurde XSUAA-sessie de auth. Geeft de
+        // rollen terug zodat de BTP-bypass naar de juiste landingstab kan routeren.
         _loadCurrentUser: function () {
+            var that = this;
             var oModel = this.getModel("app");
-            fetch("/user/whoami()", { headers: { Accept: "application/json" } })
+            var mHeaders = { Accept: "application/json" };
+            if (this._sAuthHeader) {
+                mHeaders.Authorization = this._sAuthHeader;
+            }
+            return fetch("/user/whoami()", { headers: mHeaders })
                 .then(function (oResponse) {
                     return oResponse.ok ? oResponse.json() : null;
                 })
                 .then(function (oJson) {
                     if (!oJson) {
-                        return;
+                        return null;
                     }
                     var oData = oJson.value || oJson;
                     var aRoles = oData.roles || [];
                     oModel.setProperty("/user/id", oData.id || "");
                     oModel.setProperty("/user/roles", aRoles);
                     oModel.setProperty("/user/isCoordinator", aRoles.indexOf("TravelCoordinator") !== -1);
+                    oModel.setProperty("/user/roleLabel", that._roleLabel(aRoles));
+                    return aRoles;
                 })
                 .catch(function () {
                     // geen gebruiker / endpoint niet beschikbaar → geen coordinator-UI
+                    return null;
                 });
         }
     });

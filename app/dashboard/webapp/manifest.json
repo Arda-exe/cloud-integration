@@ -85,7 +85,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             },
             "trips": {
@@ -93,7 +93,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             },
             "airlines": {
@@ -101,7 +101,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             },
             "airports": {
@@ -109,7 +109,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             }
         },
@@ -126,8 +126,13 @@
             },
             "routes": [
                 {
-                    "name": "overview",
+                    "name": "launchpad",
                     "pattern": "",
+                    "target": "launchpad"
+                },
+                {
+                    "name": "overview",
+                    "pattern": "overview",
                     "target": "overview"
                 },
                 {
@@ -157,6 +162,10 @@
                 }
             ],
             "targets": {
+                "launchpad": {
+                    "name": "Launchpad",
+                    "viewId": "launchpad"
+                },
                 "overview": {
                     "name": "Overview",
                     "viewId": "overview"

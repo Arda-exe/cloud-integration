@@ -99,19 +99,24 @@ never built).
 ## Frontend architecture & key patterns
 
 ### Shell & routing (`view/App.view.xml`, `controller/App.controller.js`)
-ShellBar (with the global-search `SearchManager`) + `IconTabHeader` (Overview · Employees ·
-Airports) + a `NavContainer` (id `content`) inside a `VBox height="100vh"` + `FlexItemData`
-(percentage heights break here — UI5 inserts unstyled wrapper divs, so the shell uses `100vh` +
-flex). Routes (route name = tab key; detail routes map to their parent tab in `App.controller`):
-- `""` → Overview · `employees` → Employees · `employees/{userName}` → EmployeeDetail
-- `employees/{userName}/trips/{tripId}` → TripDetail · `airports` → Airports
-- `airports/{iata}` → Airports (`airportFocus`, focuses the map on one airport)
+ShellBar (global-search `SearchManager`, `secondaryTitle` = active role, a **"Switch role"**
+`ShellBarItem` → launchpad) + `IconTabHeader` (Overview · Employees · Airports) + a `NavContainer`
+(id `content`) inside a `VBox height="100vh"` + `FlexItemData` (percentage heights break here — UI5
+inserts unstyled wrapper divs, so the shell uses `100vh` + flex). The IconTabHeader binds
+`visible="{app>/showChrome}"` — hidden on the launchpad, shown inside the app (`App.controller`
+sets `/showChrome` in `onRouteMatched`). Routes (route name = tab key; detail routes map to their
+parent tab; the launchpad has no tab and is handled by an early return):
+- `""` → **Launchpad** (role picker, default) · `overview` → Overview · `employees` → Employees
+- `employees/{userName}` → EmployeeDetail · `employees/{userName}/trips/{tripId}` → TripDetail
+- `airports` → Airports · `airports/{iata}` → Airports (`airportFocus`, focuses one airport)
 
 `controller/BaseController.js` — base for all controllers: `getRouter()`, `getResourceBundle()`.
 
 ### Models & app-wide cache (`Component.js`)
 Four named OData V4 models (`people`, `trips`, `airlines`, `airports`; `autoExpandSelect`,
-`operationMode: Server`, `earlyRequests`). Bind with the prefix, e.g. `{people>/People}`.
+`operationMode: Server`, **`earlyRequests: false`** — deferred so the launchpad renders with no
+authenticated request / Basic-auth dialog before a role is picked). Bind with the prefix,
+e.g. `{people>/People}`.
 TripPin is slow, so the Component memoises everything (each accessor stores a **Promise**, so
 concurrent first-callers share one request; **rejected promises are evicted** so retries work):
 - `getCachedList(model, path)` — `/People`, `/Airports`, `/Airlines`.
@@ -124,8 +129,15 @@ concurrent first-callers share one request; **rejected promises are evicted** so
   flights }`. The flight burst coalesces into one `$batch` under `$auto`.
 - `getFlightAggregate()` — all-time aggregate (top airlines/routes + `byAirport`), memoised.
 - `getAirportsByIata()` — IATA → airport-object map (O(1) lookup), memoised.
-- `_loadCurrentUser()` — `GET /user/whoami()` → an `app` JSON model
-  `{ user: { id, roles, isCoordinator } }` for role-gating.
+- `_loadCurrentUser()` — `GET /user/whoami()` → the `app` JSON model
+  `{ showChrome, user: { id, roles, isCoordinator, roleLabel } }`. Sends the `Authorization`
+  header set by `loginAs` (local); on BTP relies on the forwarded XSUAA session.
+- `loginAs(role)` — **real per-role login** (see "Launchpad"). Local (`window.location.hostname`
+  is localhost): injects `Authorization: Basic <coordinator|teamlead|hr>:test` into the 4 OData
+  models via `ODataModel.changeHttpHeaders(...)`, sets the role context, navigates to the role's
+  landing tab. BTP: the launchpad is bypassed in `init` (`_routeToRoleLanding` routes by the real
+  whoami role); no credentials are ever injected. Role maps live at the top of `Component.js`
+  (`ROLES`, `ROLE_LANDING`, `ROLE_USER`).
 
 **Cache-safety rule (the #1 regression risk):** cached arrays/objects are shared. **Never mutate
 them** — always `.slice()` before `.sort()`, and build augmented copies (`Object.assign({}, x,
@@ -163,6 +175,16 @@ it live so approve/reject/submit reflect immediately.
 - **Role gating:** coordinator-only UI binds `visible="{app>/user/isCoordinator}"`.
 
 ## Implemented features (current state)
+
+**Launchpad / role login** (`Launchpad.view/controller`, `Component.loginAs`) — the default
+screen (`""`). Three `GenericTile` panels (TravelCoordinator · TeamLead · HR; role carried via
+`app:` customData). Clicking a panel performs a **real per-role login** and routes to that role's
+landing tab: **Coordinator & TeamLead → Employees, HR → Overview**. Locally (`cds watch`, mocked
+Basic auth) it injects the matching mock-user credentials so the backend genuinely enforces the
+role (only Coordinator can approve/reject). The tab bar + Switch-role button are hidden here
+(`app>/showChrome`); the ShellBar's **Switch role** action returns to the launchpad. On BTP the
+launchpad is bypassed (role comes from the XSUAA user). No backend change — see the auth notes in
+"Models & app-wide cache".
 
 **Overview** (`Overview.view/controller`) — landing page.
 - Period `DateRangeSelection` + quick-preset buttons (All time · Last month · Last 3 months ·

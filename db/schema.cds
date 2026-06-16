@@ -25,3 +25,10 @@ entity OwnTrip {
     company           : String(100);
     team              : String(100);
 }
+entity PersonExtension {
+    key personUserName : String(100);
+    department         : String(100);
+    team               : String(100);
+    company            : String(100);
+    status             : String(20) default 'available';
+}

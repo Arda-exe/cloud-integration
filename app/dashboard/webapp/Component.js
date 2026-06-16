@@ -35,7 +35,7 @@ sap.ui.define([
 
             this.setModel(new JSONModel({
                 showChrome: false,
-                user: { id: "", roles: [], isCoordinator: false, roleLabel: "" }
+                user: { id: "", initials: "", roles: [], isCoordinator: false, roleLabel: "" }
             }), "app");
 
             this.getRouter().initialize();
@@ -303,7 +303,9 @@ sap.ui.define([
                     if (!oJson) { return null; }
                     var oData = oJson.value || oJson;
                     var aRoles = oData.roles || [];
-                    oModel.setProperty("/user/id", oData.id || "");
+                    var sId = oData.id || "";
+                    oModel.setProperty("/user/id", sId);
+                    oModel.setProperty("/user/initials", sId.slice(0, 2).toUpperCase());
                     oModel.setProperty("/user/roles", aRoles);
                     oModel.setProperty("/user/isCoordinator", aRoles.indexOf("TravelCoordinator") !== -1);
                     oModel.setProperty("/user/roleLabel", that._roleLabel(aRoles));

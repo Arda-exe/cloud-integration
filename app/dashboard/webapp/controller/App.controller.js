@@ -32,8 +32,12 @@ sap.ui.define([
                 this.getRouter().navTo("launchpad");
                 return;
             }
-            // detail routes horen bij de tab van hun lijst
-            var mRouteToTab = { employee: "employees", trip: "employees", airportFocus: "airports" };
+            // detail routes horen bij de tab van hun lijst (allTrips wordt vanuit Employees
+            // geopend → blijft onder de Employees-tab; geen aparte Trips-tab, zie domeinregel)
+            var mRouteToTab = {
+                employee: "employees", trip: "employees", allTrips: "employees",
+                airportFocus: "airports"
+            };
             this.byId("tabHeader").setSelectedKey(mRouteToTab[sRoute] || sRoute);
         },
 

@@ -20,6 +20,7 @@ modules:
         - "*.mtar"
         - "Makefile_*"
         - ".primepath-travel_mta_build_tmp/"
+        - gen/
     provides:
       - name: srv-api
         properties:
@@ -46,7 +47,7 @@ modules:
 
   - name: primepath-travel-db-deployer
     type: hdb
-    path: db
+    path: gen/db
     parameters:
       buildpack: nodejs_buildpack
     requires:

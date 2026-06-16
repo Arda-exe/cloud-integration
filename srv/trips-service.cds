@@ -38,4 +38,11 @@ service TripsService @(path: '/trips') {
         action approve();
         action rejectTrip();
     };
+
+    @restrict: [
+        { grant: ['READ'],          to: 'TeamLead' },
+        { grant: ['READ'],          to: 'HR' },
+        { grant: ['READ','WRITE'],  to: 'TravelCoordinator' }
+    ]
+    entity OwnTrips as projection on primepath.OwnTrip;
 }

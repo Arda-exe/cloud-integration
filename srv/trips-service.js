@@ -48,6 +48,11 @@ module.exports = cds.service.impl(async function () {
         }))
     })
 
+    this.before('CREATE', 'OwnTrips', async (req) => {
+        req.data.createdAt = new Date().toISOString()
+        req.data.createdBy = req.user?.id ?? 'unknown'
+    })
+
     this.on('approve', 'TripExtensions', async (req) => {
         await UPDATE(req.subject).set({ approvalStatus: 'approved' })
     })
@@ -55,4 +60,4 @@ module.exports = cds.service.impl(async function () {
     this.on('rejectTrip', 'TripExtensions', async (req) => {
         await UPDATE(req.subject).set({ approvalStatus: 'rejected' })
     })
-})
+})  

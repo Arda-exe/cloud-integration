@@ -53,6 +53,12 @@
                         <Title text="{i18n>tripsTitle}" />
                         <ToolbarSpacer />
                         <Button
+                            text="+ Nieuwe Trip"
+                            type="Emphasized"
+                            icon="sap-icon://add"
+                            visible="{app>/user/isCoordinator}"
+                            press=".onCreateTrip" />
+                        <Button
                             icon="sap-icon://map"
                             text="{i18n>btnLocateOnDate}"
                             press=".onOpenLocation" />

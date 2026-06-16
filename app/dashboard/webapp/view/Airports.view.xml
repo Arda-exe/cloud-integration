@@ -7,57 +7,83 @@
 
     <Page showHeader="false" backgroundDesign="List">
         <content>
-            <core:HTML content='&lt;div id="airportsMap" style="height: 45vh; width: 100%;"&gt;&lt;/div&gt;' />
+            <HBox height="82vh" class="sapUiSmallMargin">
 
-            <Table
-                id="airportsTable"
-                items="{view>/airports}"
-                noDataText="{i18n>airportsNoData}"
-                sticky="ColumnHeaders">
+                <!-- kaart vult de overige breedte -->
+                <core:HTML content='&lt;div id="airportsMap" style="height: 100%; width: 100%;"&gt;&lt;/div&gt;'>
+                    <core:layoutData>
+                        <FlexItemData growFactor="1" baseSize="0%" />
+                    </core:layoutData>
+                </core:HTML>
 
-                <headerToolbar>
-                    <OverflowToolbar>
-                        <Title text="{i18n>airportsTableTitle} ({view>/count})" />
-                        <ToolbarSpacer />
-                        <SearchField
-                            id="airportsSearch"
-                            width="20rem"
-                            placeholder="{i18n>airportsSearchPlaceholder}"
-                            liveChange=".onSearch" />
-                    </OverflowToolbar>
-                </headerToolbar>
+                <!-- vast rechterpaneel: lijst ↔ detail via NavContainer -->
+                <NavContainer id="airportNav" width="26rem" class="sapUiSmallMarginBegin">
 
-                <columns>
-                    <Column>
-                        <Text text="{i18n>colAirport}" />
-                    </Column>
-                    <Column width="6rem" minScreenWidth="Tablet" demandPopin="true">
-                        <Text text="{i18n>colIata}" />
-                    </Column>
-                    <Column width="6rem" minScreenWidth="Desktop" demandPopin="true">
-                        <Text text="{i18n>colIcao}" />
-                    </Column>
-                    <Column>
-                        <Text text="{i18n>colCity}" />
-                    </Column>
-                    <Column minScreenWidth="Tablet" demandPopin="true">
-                        <Text text="{i18n>colCountry}" />
-                    </Column>
-                </columns>
+                    <Page id="airportListPage" title="{i18n>airportsTableTitle} ({view>/count})">
+                        <subHeader>
+                            <Toolbar>
+                                <SearchField
+                                    id="airportsSearch"
+                                    placeholder="{i18n>airportsSearchPlaceholder}"
+                                    liveChange=".onSearch" />
+                            </Toolbar>
+                        </subHeader>
+                        <List
+                            items="{view>/airports}"
+                            noDataText="{i18n>airportsNoData}">
+                            <StandardListItem
+                                title="{view>Name}"
+                                description="{view>IataCode} / {view>Location/City/Name}"
+                                type="Navigation"
+                                press=".onAirportPress" />
+                        </List>
+                    </Page>
 
-                <items>
-                    <ColumnListItem type="Active" press=".onAirportPress">
-                        <cells>
-                            <ObjectIdentifier title="{view>Name}" />
-                            <Text text="{view>IataCode}" />
-                            <Text text="{view>IcaoCode}" />
-                            <Text text="{view>Location/City/Name}" />
-                            <Text text="{view>Location/City/CountryRegion}" />
-                        </cells>
-                    </ColumnListItem>
-                </items>
+                    <Page
+                        id="airportDetailPage"
+                        title="{view>/selected/name}"
+                        showNavButton="true"
+                        navButtonPress=".onCloseAirportPanel">
+                        <VBox class="sapUiSmallMargin">
+                            <HBox class="sapUiTinyMarginBottom">
+                                <Label text="{i18n>colIata} / {i18n>colIcao}" width="8rem" />
+                                <Text text="{view>/selected/iata} &#183; {view>/selected/icao}" />
+                            </HBox>
+                            <HBox class="sapUiTinyMarginBottom">
+                                <Label text="{i18n>colCity}" width="8rem" />
+                                <Text text="{view>/selected/city}, {view>/selected/country}" />
+                            </HBox>
+                            <HBox class="sapUiTinyMarginBottom">
+                                <Label text="{i18n>lblCoordinates}" width="8rem" />
+                                <Text text="{view>/selected/coords}" />
+                            </HBox>
+                            <VBox busy="{view>/selected/busy}" busyIndicatorDelay="200">
+                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <Label text="{i18n>lblTraffic}" width="8rem" />
+                                    <ObjectStatus text="{view>/selected/trafficText}" state="{view>/selected/trafficState}" />
+                                </HBox>
+                                <HBox class="sapUiTinyMarginBottom">
+                                    <Label text="{i18n>lblFlightsVia}" width="8rem" />
+                                    <Text text="{view>/selected/flights}" />
+                                </HBox>
+                                <List
+                                    headerText="{i18n>tripsViaTitle}"
+                                    items="{view>/selected/trips}"
+                                    noDataText="{i18n>tripsViaNoData}"
+                                    growing="true"
+                                    growingThreshold="20">
+                                    <StandardListItem
+                                        title="{view>tripName}"
+                                        description="{view>travellersText}"
+                                        type="Navigation"
+                                        press=".onSelectedTripPress" />
+                                </List>
+                            </VBox>
+                        </VBox>
+                    </Page>
 
-            </Table>
+                </NavContainer>
+            </HBox>
         </content>
     </Page>
 

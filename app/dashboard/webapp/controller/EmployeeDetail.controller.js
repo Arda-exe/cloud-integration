@@ -1,23 +1,28 @@
 sap.ui.define([
-    "sap/ui/core/mvc/Controller",
+    "primepath/dashboard/controller/BaseController",
     "sap/ui/model/json/JSONModel",
-    "sap/ui/model/Filter",
-    "sap/ui/model/FilterOperator",
     "sap/ui/core/format/DateFormat",
     "sap/m/MessageToast",
-    "sap/base/Log"
-], function (Controller, JSONModel, Filter, FilterOperator, DateFormat, MessageToast, Log) {
+    "sap/base/Log",
+    "primepath/dashboard/util/formatters",
+    "primepath/dashboard/util/constants",
+    "primepath/dashboard/util/datePresets"
+], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, constants, datePresets) {
     "use strict";
 
-    var MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-    return Controller.extend("primepath.dashboard.controller.EmployeeDetail", {
+    return BaseController.extend("primepath.dashboard.controller.EmployeeDetail", {
 
         onInit: function () {
             this._oDateFormat = DateFormat.getDateInstance({ style: "medium" });
             this._aAllTrips = [];
-            this.getView().setModel(new JSONModel({ trips: [], locationText: "", busy: false }), "detail");
-            this.getOwnerComponent().getRouter().getRoute("employee")
+            this.getView().setModel(new JSONModel({
+                trips: [],
+                locationText: "",
+                busy: false,
+                preset: "all",   // actieve snelkeuze ("" = handmatig bereik)
+                counts: { total: 0, upcoming: 0, completed: 0 }
+            }), "detail");
+            this.getRouter().getRoute("employee")
                 .attachPatternMatched(this.onPatternMatched, this);
         },
 
@@ -35,10 +40,11 @@ sap.ui.define([
             this._aAllTrips = [];
             this.byId("tripsRange").setDateValue(null);
             this.byId("tripsRange").setSecondDateValue(null);
-            this.byId("locationDate").setDateValue(null);
             var oDetail = this.getView().getModel("detail");
             oDetail.setProperty("/trips", []);
             oDetail.setProperty("/locationText", "");
+            oDetail.setProperty("/preset", "all");
+            oDetail.setProperty("/counts", { total: 0, upcoming: 0, completed: 0 });
 
             this._loadTrips(sUserName);
         },
@@ -46,40 +52,60 @@ sap.ui.define([
         _loadTrips: function (sUserName) {
             var that = this;
             var oDetail = this.getView().getModel("detail");
-            var oTripsModel = this.getOwnerComponent().getModel("trips");
             oDetail.setProperty("/busy", true);
 
-            // trips-service.js haalt de username uit de filterconditie met een regex
-            // op "personUserName eq '...'" (CLAUDE.md backend issue 4). Het veld MOET
-            // dus personUserName heten, anders matcht de regex niet en geeft de backend
-            // [] terug. Wordt een echte server-side filter zodra de backend PersonTrips
-            // de projectie met personUserName vult.
-            var oBinding = oTripsModel.bindList("/PersonTrips", undefined, undefined,
-                [new Filter("personUserName", FilterOperator.EQ, sUserName)]);
-
-            oBinding.requestContexts(0, 100).then(function (aContexts) {
+            // trips uit de app-brede cache (gedeeld met Overview/TripDetail)
+            this.getOwnerComponent().getCachedTrips(sUserName).then(function (aTrips) {
                 if (that._sUserName !== sUserName) {
                     return; // intussen naar een andere persoon genavigeerd
                 }
-                var aTrips = aContexts.map(function (oContext) {
-                    return oContext.getObject();
-                });
-                // chronologisch; ISO-strings sorteren correct als tekst
-                aTrips.sort(function (a, b) {
+                // kopie vóór sort — gedeelde cache-array niet muteren; ISO-strings
+                // sorteren correct als tekst (chronologisch)
+                that._aAllTrips = aTrips.slice().sort(function (a, b) {
                     return a.StartsAt < b.StartsAt ? -1 : 1;
                 });
-                that._aAllTrips = aTrips;
+                // tellers over ALLE trips van de persoon (niet de periode-gefilterde lijst)
+                oDetail.setProperty("/counts", that._computeCounts(that._aAllTrips));
                 that._applyDateRange();
                 oDetail.setProperty("/busy", false);
             }).catch(function (oError) {
                 Log.error("Loading trips failed", oError);
                 oDetail.setProperty("/busy", false);
-                var oBundle = that.getOwnerComponent().getModel("i18n").getResourceBundle();
-                MessageToast.show(oBundle.getText("tripsLoadError"));
+                MessageToast.show(that.getResourceBundle().getText("tripsLoadError"));
             });
         },
 
+        // Total / Upcoming (start in de toekomst) / Completed (einde in het verleden) t.o.v. nu.
+        // Een lopende trip (start <= nu <= einde) telt mee in Total maar niet in Upcoming/Completed.
+        _computeCounts: function (aTrips) {
+            var iNow = Date.now();
+            var iUpcoming = 0;
+            var iCompleted = 0;
+            aTrips.forEach(function (oTrip) {
+                if (new Date(oTrip.StartsAt).getTime() > iNow) {
+                    iUpcoming++;
+                } else if (new Date(oTrip.EndsAt).getTime() < iNow) {
+                    iCompleted++;
+                }
+            });
+            return { total: aTrips.length, upcoming: iUpcoming, completed: iCompleted };
+        },
+
         onDateRangeChange: function () {
+            // handmatig bereik → geen snelkeuze meer actief
+            this.getView().getModel("detail").setProperty("/preset", "");
+            this._applyDateRange();
+        },
+
+        // snelkeuze-knop: vult de DateRangeSelection (programmatisch → vuurt geen change)
+        // en filtert meteen. "all" wist het bereik.
+        onPresetPress: function (oEvent) {
+            var sKey = oEvent.getSource().data("period");
+            var oRange = datePresets.rangeFor(sKey);
+            this.getView().getModel("detail").setProperty("/preset", sKey);
+            var oPicker = this.byId("tripsRange");
+            oPicker.setDateValue(oRange ? oRange.from : null);
+            oPicker.setSecondDateValue(oRange ? oRange.to : null);
             this._applyDateRange();
         },
 
@@ -91,7 +117,7 @@ sap.ui.define([
 
             if (oFrom && oTo) {
                 var iFrom = oFrom.getTime();
-                var iTo = oTo.getTime() + MS_PER_DAY - 1;
+                var iTo = oTo.getTime() + constants.MS_PER_DAY - 1;
                 aTrips = aTrips.filter(function (oTrip) {
                     // een trip telt mee zodra hij de gekozen periode overlapt
                     return new Date(oTrip.EndsAt).getTime() >= iFrom
@@ -99,6 +125,26 @@ sap.ui.define([
                 });
             }
             this.getView().getModel("detail").setProperty("/trips", aTrips);
+        },
+
+        // "Locate on date" achter een knop → kleine popover (geen tweede zichtbaar datumveld
+        // naast de trips-periodefilter). Start telkens leeg.
+        onOpenLocation: function (oEvent) {
+            var that = this;
+            var oButton = oEvent.getSource();
+            var fnOpen = function () {
+                that.byId("locationDate").setDateValue(null);
+                that.getView().getModel("detail").setProperty("/locationText", "");
+                that._oLocationPopover.openBy(oButton);
+            };
+            if (this._oLocationPopover) {
+                fnOpen();
+                return;
+            }
+            this.loadFragment({ name: "primepath.dashboard.view.LocationPopover" }).then(function (oPopover) {
+                that._oLocationPopover = oPopover;
+                fnOpen();
+            });
         },
 
         onLocationDateChange: function (oEvent) {
@@ -109,14 +155,14 @@ sap.ui.define([
                 return;
             }
 
-            var oBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+            var oBundle = this.getResourceBundle();
             var oContext = this.getView().getBindingContext("people");
             var oPerson = (oContext && oContext.getObject()) || {};
             var sName = oPerson.FirstName || this._sUserName;
             var sDate = this._oDateFormat.format(oDate);
 
             var iDayStart = oDate.getTime();
-            var iDayEnd = iDayStart + MS_PER_DAY - 1;
+            var iDayEnd = iDayStart + constants.MS_PER_DAY - 1;
             var oTrip = this._aAllTrips.find(function (t) {
                 return new Date(t.StartsAt).getTime() <= iDayEnd
                     && new Date(t.EndsAt).getTime() >= iDayStart;
@@ -136,31 +182,27 @@ sap.ui.define([
 
         onTripPress: function (oEvent) {
             var oTrip = oEvent.getSource().getBindingContext("detail").getObject();
-            this.getOwnerComponent().getRouter().navTo("trip", {
+            this.getRouter().navTo("trip", {
                 userName: this._sUserName,
                 tripId: oTrip.TripId
             });
         },
 
         onNavBack: function () {
-            this.getOwnerComponent().getRouter().navTo("employees");
+            this.getRouter().navTo("employees");
         },
 
-        formatEmails: function (aEmails) {
-            return Array.isArray(aEmails) ? aEmails.join(", ") : "";
-        },
-
-        formatCity: function (aAddressInfo) {
-            var oCity = Array.isArray(aAddressInfo) && aAddressInfo[0] && aAddressInfo[0].City;
-            return oCity ? oCity.Name + ", " + oCity.CountryRegion : "";
-        },
-
-        formatPeriod: function (sStartsAt, sEndsAt) {
-            if (!sStartsAt || !sEndsAt) {
-                return "";
+        onExit: function () {
+            if (this._oLocationPopover) {
+                this._oLocationPopover.destroy();
+                this._oLocationPopover = null;
             }
-            return this._oDateFormat.format(new Date(sStartsAt)) + " – "
-                + this._oDateFormat.format(new Date(sEndsAt));
-        }
+        },
+
+        formatEmails: formatters.formatEmails,
+
+        formatCity: formatters.formatCity,
+
+        formatPeriod: formatters.formatPeriod
     });
 });

@@ -63,7 +63,8 @@
             "libs": {
                 "sap.ui.core": {},
                 "sap.m": {},
-                "sap.f": {}
+                "sap.f": {},
+                "sap.suite.ui.microchart": {}
             }
         },
         "contentDensities": {
@@ -84,7 +85,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             },
             "trips": {
@@ -92,7 +93,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             },
             "airlines": {
@@ -100,7 +101,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             },
             "airports": {
@@ -108,7 +109,7 @@
                 "settings": {
                     "autoExpandSelect": true,
                     "operationMode": "Server",
-                    "earlyRequests": true
+                    "earlyRequests": false
                 }
             }
         },
@@ -125,8 +126,13 @@
             },
             "routes": [
                 {
-                    "name": "overview",
+                    "name": "launchpad",
                     "pattern": "",
+                    "target": "launchpad"
+                },
+                {
+                    "name": "overview",
+                    "pattern": "overview",
                     "target": "overview"
                 },
                 {
@@ -145,12 +151,21 @@
                     "target": "airports"
                 },
                 {
+                    "name": "airportFocus",
+                    "pattern": "airports/{iata}",
+                    "target": "airports"
+                },
+                {
                     "name": "trip",
                     "pattern": "employees/{userName}/trips/{tripId}",
                     "target": "trip"
                 }
             ],
             "targets": {
+                "launchpad": {
+                    "name": "Launchpad",
+                    "viewId": "launchpad"
+                },
                 "overview": {
                     "name": "Overview",
                     "viewId": "overview"

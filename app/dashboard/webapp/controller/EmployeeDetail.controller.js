@@ -3,11 +3,12 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/ui/core/format/DateFormat",
     "sap/m/MessageToast",
+    "sap/m/MessageBox",
     "sap/base/Log",
     "primepath/dashboard/util/formatters",
     "primepath/dashboard/util/constants",
     "primepath/dashboard/util/datePresets"
-], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, constants, datePresets) {
+], function (BaseController, JSONModel, DateFormat, MessageToast, MessageBox, Log, formatters, constants, datePresets) {
     "use strict";
 
     return BaseController.extend("primepath.dashboard.controller.EmployeeDetail", {
@@ -15,11 +16,12 @@ sap.ui.define([
         onInit: function () {
             this._oDateFormat = DateFormat.getDateInstance({ style: "medium" });
             this._aAllTrips = [];
+            this._oCreateDialog = null;
             this.getView().setModel(new JSONModel({
                 trips: [],
                 locationText: "",
                 busy: false,
-                preset: "all",   // actieve snelkeuze ("" = handmatig bereik)
+                preset: "all",
                 counts: { total: 0, upcoming: 0, completed: 0 }
             }), "detail");
             this.getRouter().getRoute("employee")
@@ -30,13 +32,11 @@ sap.ui.define([
             var sUserName = oEvent.getParameter("arguments").userName;
             this._sUserName = sUserName;
 
-            // OData escapet een ' in een string-literal door verdubbeling
             var sKey = encodeURIComponent(sUserName.replace(/'/g, "''"));
             this.getView().bindElement({
                 path: "people>/People('" + sKey + "')"
             });
 
-            // UI-state resetten bij wissel van persoon
             this._aAllTrips = [];
             this.byId("tripsRange").setDateValue(null);
             this.byId("tripsRange").setSecondDateValue(null);
@@ -54,17 +54,11 @@ sap.ui.define([
             var oDetail = this.getView().getModel("detail");
             oDetail.setProperty("/busy", true);
 
-            // trips uit de app-brede cache (gedeeld met Overview/TripDetail)
             this.getOwnerComponent().getCachedTrips(sUserName).then(function (aTrips) {
-                if (that._sUserName !== sUserName) {
-                    return; // intussen naar een andere persoon genavigeerd
-                }
-                // kopie vóór sort — gedeelde cache-array niet muteren; ISO-strings
-                // sorteren correct als tekst (chronologisch)
+                if (that._sUserName !== sUserName) { return; }
                 that._aAllTrips = aTrips.slice().sort(function (a, b) {
                     return a.StartsAt < b.StartsAt ? -1 : 1;
                 });
-                // tellers over ALLE trips van de persoon (niet de periode-gefilterde lijst)
                 oDetail.setProperty("/counts", that._computeCounts(that._aAllTrips));
                 that._applyDateRange();
                 oDetail.setProperty("/busy", false);
@@ -75,8 +69,6 @@ sap.ui.define([
             });
         },
 
-        // Total / Upcoming (start in de toekomst) / Completed (einde in het verleden) t.o.v. nu.
-        // Een lopende trip (start <= nu <= einde) telt mee in Total maar niet in Upcoming/Completed.
         _computeCounts: function (aTrips) {
             var iNow = Date.now();
             var iUpcoming = 0;
@@ -92,13 +84,10 @@ sap.ui.define([
         },
 
         onDateRangeChange: function () {
-            // handmatig bereik → geen snelkeuze meer actief
             this.getView().getModel("detail").setProperty("/preset", "");
             this._applyDateRange();
         },
 
-        // snelkeuze-knop: vult de DateRangeSelection (programmatisch → vuurt geen change)
-        // en filtert meteen. "all" wist het bereik.
         onPresetPress: function (oEvent) {
             var sKey = oEvent.getSource().data("period");
             var oRange = datePresets.rangeFor(sKey);
@@ -119,7 +108,6 @@ sap.ui.define([
                 var iFrom = oFrom.getTime();
                 var iTo = oTo.getTime() + constants.MS_PER_DAY - 1;
                 aTrips = aTrips.filter(function (oTrip) {
-                    // een trip telt mee zodra hij de gekozen periode overlapt
                     return new Date(oTrip.EndsAt).getTime() >= iFrom
                         && new Date(oTrip.StartsAt).getTime() <= iTo;
                 });
@@ -127,8 +115,6 @@ sap.ui.define([
             this.getView().getModel("detail").setProperty("/trips", aTrips);
         },
 
-        // "Locate on date" achter een knop → kleine popover (geen tweede zichtbaar datumveld
-        // naast de trips-periodefilter). Start telkens leeg.
         onOpenLocation: function (oEvent) {
             var that = this;
             var oButton = oEvent.getSource();
@@ -183,9 +169,105 @@ sap.ui.define([
         onTripPress: function (oEvent) {
             var oTrip = oEvent.getSource().getBindingContext("detail").getObject();
             this.getRouter().navTo("trip", {
-                userName: this._sUserName,
-                tripId: oTrip.TripId
+             userName: this._sUserName,
+             tripId: oTrip.TripId
+          });
+        },
+
+        _showOwnTripDetail: function (oTrip) {
+            var oFmt = this._oDateFormat;
+            var sStart = oTrip.StartsAt ? oFmt.format(new Date(oTrip.StartsAt)) : "—";
+            var sEnd   = oTrip.EndsAt   ? oFmt.format(new Date(oTrip.EndsAt))   : "—";
+
+            MessageBox.information(
+                "Periode: " + sStart + " – " + sEnd + "\n" +
+                "Bestemming: " + (oTrip.Description || "—") + "\n" +
+                "Budget: " + (oTrip.Budget ? oTrip.Budget + " USD" : "—"),
+                {
+                    title: oTrip.Name + " (Eigen trip)",
+                    actions: [MessageBox.Action.CLOSE]
+                }
+            );
+        },
+
+        onCreateTrip: function () {
+            var that = this;
+            if (this._oCreateDialog) {
+                this._resetCreateForm();
+                this._oCreateDialog.open();
+                return;
+            }
+            this.loadFragment({ name: "primepath.dashboard.view.CreateTripDialog" })
+                .then(function (oDialog) {
+                    that._oCreateDialog = oDialog;
+                    oDialog.open();
+                });
+        },
+
+        _resetCreateForm: function () {
+            this.byId("tripName").setValue("");
+            this.byId("tripDestination").setValue("");
+            this.byId("tripStartsAt").setDateValue(null);
+            this.byId("tripEndsAt").setDateValue(null);
+            this.byId("tripBudget").setValue("");
+            this.byId("tripDescription").setValue("");
+        },
+
+        onSaveTrip: function () {
+            var that = this;
+            var sName        = this.byId("tripName").getValue().trim();
+            var sDestination = this.byId("tripDestination").getValue().trim();
+            var oStartsAt    = this.byId("tripStartsAt").getDateValue();
+            var oEndsAt      = this.byId("tripEndsAt").getDateValue();
+            var sBudget      = this.byId("tripBudget").getValue();
+            var sDescription = this.byId("tripDescription").getValue().trim();
+
+            if (!sName || !oStartsAt || !oEndsAt) {
+                MessageToast.show("Vul naam, startdatum en einddatum in.");
+                return;
+            }
+            if (oEndsAt < oStartsAt) {
+                MessageToast.show("Einddatum moet na startdatum liggen.");
+                return;
+            }
+
+            var oComp = this.getOwnerComponent();
+            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
+            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+
+            var oBody = {
+                personUserName: this._sUserName,
+                name:           sName,
+                destination:    sDestination,
+                startsAt:       oStartsAt.toISOString(),
+                endsAt:         oEndsAt.toISOString(),
+                budget:         sBudget ? parseFloat(sBudget) : null,
+                description:    sDescription
+            };
+
+            fetch("/trips/OwnTrips", {
+                method: "POST",
+                headers: mHeaders,
+                body: JSON.stringify(oBody)
+            })
+            .then(function (r) {
+                if (!r.ok) { throw new Error("HTTP " + r.status); }
+                return r.json();
+            })
+            .then(function () {
+                that._oCreateDialog.close();
+                MessageToast.show("Trip \"" + sName + "\" aangemaakt!");
+                delete oComp._mTripsCache[that._sUserName];
+                that._loadTrips(that._sUserName);
+            })
+            .catch(function (oError) {
+                Log.error("Create trip failed", oError);
+                MessageToast.show("Aanmaken mislukt. Probeer opnieuw.");
             });
+        },
+
+        onCancelTrip: function () {
+            this._oCreateDialog.close();
         },
 
         onNavBack: function () {
@@ -197,12 +279,14 @@ sap.ui.define([
                 this._oLocationPopover.destroy();
                 this._oLocationPopover = null;
             }
+            if (this._oCreateDialog) {
+                this._oCreateDialog.destroy();
+                this._oCreateDialog = null;
+            }
         },
 
         formatEmails: formatters.formatEmails,
-
-        formatCity: formatters.formatCity,
-
+        formatCity:   formatters.formatCity,
         formatPeriod: formatters.formatPeriod
     });
 });

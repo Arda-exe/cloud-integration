@@ -11,19 +11,22 @@ sap.ui.define([
 ], function (BaseController, JSONModel, Filter, FilterOperator, DateFormat, MessageToast, MessageBox, Log, formatters) {
     "use strict";
 
-    // approvalStatus → sap.ui.core.ValueState voor de gekleurde ObjectStatus
     var STATUS_STATE = {
         approved: "Success",
         rejected: "Error",
-        pending: "Warning"
+        pending:  "Warning"
+    };
+
+    var STATUS_TEXT = {
+        approved: "Goedgekeurd",
+        rejected: "Afgekeurd",
+        pending:  "In behandeling"
     };
 
     return BaseController.extend("primepath.dashboard.controller.TripDetail", {
 
         onInit: function () {
             this._oDateTimeFormat = DateFormat.getDateTimeInstance({ style: "medium" });
-            // monotone laad-teller: TripPin is traag en de view wordt hergebruikt tussen trips,
-            // dus een trage vorige load mag de nieuwe niet overschrijven (vgl. EmployeeDetail)
             this._iLoadSeq = 0;
             this.getView().setModel(new JSONModel({
                 busy: false,
@@ -40,21 +43,110 @@ sap.ui.define([
                 .attachPatternMatched(this.onPatternMatched, this);
         },
 
-        onPatternMatched: function (oEvent) {
+       onPatternMatched: function (oEvent) {
             var oArgs = oEvent.getParameter("arguments");
-            this._sUserName = oArgs.userName;
-            this._iTripId = parseInt(oArgs.tripId, 10);
+            this._sUserName  = oArgs.userName;
+            this._sTripIdRaw = oArgs.tripId;
+            this._iTripId    = parseInt(oArgs.tripId, 10);
+    
+            this._bIsOwn = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(oArgs.tripId);
             this._load();
         },
 
         _load: function () {
+            if (this._bIsOwn) {
+                this._loadOwnTrip();
+                return;
+            }
+            this._loadTripPinTrip();
+        },
+
+
+        _loadOwnTrip: function () {
             var that = this;
-            var iSeq = ++this._iLoadSeq;          // deze load; latere navigatie verhoogt de teller
-            var sUserName = this._sUserName;       // vastleggen → stale-borrow filtert op de juiste kopie
+            var oModel = this.getView().getModel("trip");
+            var oComp = this.getOwnerComponent();
+
+            oModel.setData({
+                busy: true, personName: this._sUserName, periodText: "",
+                trip: {}, ext: {}, flights: [], flightsBusy: false,
+                route: { has: false }, coTravellers: []
+            });
+
+            var mHeaders = { Accept: "application/json" };
+            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+
+            fetch("/trips/OwnTrips(" + this._sTripIdRaw + ")", { headers: mHeaders })
+                .then(function (r) {
+                    if (!r.ok) { throw new Error("HTTP " + r.status); }
+                    return r.json();
+                })
+                .then(function (oTrip) {
+                    var sStatus = oTrip.approvalStatus || "pending";
+                    oModel.setProperty("/trip", {
+                        Name:        oTrip.name,
+                        Budget:      oTrip.budget,
+                        Description: oTrip.description || oTrip.destination || ""
+                    });
+                    oModel.setProperty("/personName", that._sUserName);
+                    oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
+                    oModel.setProperty("/ext", {
+                        exists:      true,
+                        statusText:  STATUS_TEXT[sStatus] || sStatus,
+                        statusState: STATUS_STATE[sStatus] || "None"
+                    });
+                    oModel.setProperty("/busy", false);
+                    oModel.setProperty("/flightsBusy", false);
+                })
+                .catch(function (oError) {
+                    Log.error("Loading own trip failed", oError);
+                    oModel.setProperty("/busy", false);
+                    oModel.setProperty("/flightsBusy", false);
+                    MessageToast.show(that.getResourceBundle().getText("tripLoadError"));
+                });
+        },
+
+        _approveOwnTrip: function () {
+            this._patchOwnTripStatus("approved");
+        },
+
+        _rejectOwnTrip: function () {
+            this._patchOwnTripStatus("rejected");
+        },
+
+        _patchOwnTripStatus: function (sStatus) {
+            var that = this;
+            var oComp = this.getOwnerComponent();
+            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
+            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+
+            fetch("/trips/OwnTrips('" + this._sTripIdRaw + "')", {
+                method: "PATCH",
+                headers: mHeaders,
+                body: JSON.stringify({ approvalStatus: sStatus })
+            })
+            .then(function (r) {
+                if (!r.ok) { throw new Error("HTTP " + r.status); }
+                MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
+                // cache wissen zodat employee detail ook de nieuwe status ziet
+                delete oComp._mTripsCache[that._sUserName];
+                that._loadOwnTrip();
+            })
+            .catch(function (oError) {
+                Log.error("Patch own trip status failed", oError);
+                MessageToast.show(that.getResourceBundle().getText("approvalActionError"));
+            });
+        },
+
+        _loadTripPinTrip: function () {
+            var that = this;
+            var iSeq = ++this._iLoadSeq;
+            var sUserName = this._sUserName;
             var iTripId = this._iTripId;
             var oModel = this.getView().getModel("trip");
             var oComponent = this.getOwnerComponent();
             var oTripsModel = oComponent.getModel("trips");
+
             oModel.setData({
                 busy: true,
                 personName: this._sUserName,
@@ -67,11 +159,6 @@ sap.ui.define([
                 coTravellers: []
             });
 
-            // Trips en vluchten uit de app-brede cache (gedeeld met Overview /
-            // EmployeeDetail); de juiste trip wordt client-side op TripId gekozen.
-            // TripExtensions is schrijfbaar → NIET cachen, altijd live lezen met een
-            // filter op de samengestelde sleutel (geen keyed read → geen 404-ruis als er
-            // nog geen rij is), zodat approve/reject/submit meteen zichtbaar is na _load().
             var oExtBinding = oTripsModel.bindList("/TripExtensions", undefined, undefined, [
                 new Filter("personUserName", FilterOperator.EQ, this._sUserName),
                 new Filter("tripId", FilterOperator.EQ, this._iTripId)
@@ -83,9 +170,7 @@ sap.ui.define([
                 oComponent.getCachedFlights(this._sUserName, this._iTripId),
                 oComponent.getAirportsByIata().catch(function () { return {}; })
             ]).then(function (aResults) {
-                if (iSeq !== that._iLoadSeq) {
-                    return;   // ondertussen naar een andere trip genavigeerd → resultaat negeren
-                }
+                if (iSeq !== that._iLoadSeq) { return; }
                 var oTrip = aResults[0].find(function (oCandidate) {
                     return oCandidate.TripId === iTripId;
                 });
@@ -103,8 +188,6 @@ sap.ui.define([
                 that._applyTrip(oTrip, aExt.length ? aExt[0].getObject() : null);
                 oModel.setProperty("/busy", false);
 
-                // eigen vluchten meteen tonen; een lege kopie van een gedeelde trip wordt in
-                // _loadSharedTrip aangevuld vanaf een mede-reiziger (flightsBusy blijft tot dan)
                 if (aOwnFlights && aOwnFlights.length) {
                     that._applyFlights(aOwnFlights);
                     that._applyRoute(aOwnFlights, mByIata);
@@ -112,9 +195,7 @@ sap.ui.define([
                 }
                 that._loadSharedTrip(oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq);
             }).catch(function (oError) {
-                if (iSeq !== that._iLoadSeq) {
-                    return;
-                }
+                if (iSeq !== that._iLoadSeq) { return; }
                 Log.error("Loading trip detail failed", oError);
                 oModel.setProperty("/busy", false);
                 oModel.setProperty("/flightsBusy", false);
@@ -127,16 +208,16 @@ sap.ui.define([
             var sNone = this.getResourceBundle().getText("valueNone");
             var aFlights = aFlightObjects.map(function (o) {
                 return {
-                    flightId: o.PlanItemId,
+                    flightId:    o.PlanItemId,
                     flightTitle: (o.airlineName ? o.airlineName + " " : "") + (o.FlightNumber || ""),
                     airlineName: o.airlineName || "",
-                    seat: o.SeatNumber || sNone,
-                    departure: o.StartsAt ? that._oDateTimeFormat.format(new Date(o.StartsAt)) : "",
-                    arrival: o.EndsAt ? that._oDateTimeFormat.format(new Date(o.EndsAt)) : "",
-                    fromIata: o.fromIata,
-                    fromName: o.fromName,
-                    toIata: o.toIata,
-                    toName: o.toName
+                    seat:        o.SeatNumber || sNone,
+                    departure:   o.StartsAt ? that._oDateTimeFormat.format(new Date(o.StartsAt)) : "",
+                    arrival:     o.EndsAt   ? that._oDateTimeFormat.format(new Date(o.EndsAt))   : "",
+                    fromIata:    o.fromIata,
+                    fromName:    o.fromName,
+                    toIata:      o.toIata,
+                    toName:      o.toName
                 };
             });
             var oModel = this.getView().getModel("trip");
@@ -147,22 +228,17 @@ sap.ui.define([
         _applyTrip: function (oTrip, oExt) {
             var oModel = this.getView().getModel("trip");
             var oBundle = this.getResourceBundle();
-
             oModel.setProperty("/trip", oTrip);
             oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.StartsAt, oTrip.EndsAt));
 
             var sStatus = oExt && oExt.approvalStatus;
             oModel.setProperty("/ext", {
-                exists: !!oExt,
-                statusText: sStatus || oBundle.getText("approvalNone"),
+                exists:      !!oExt,
+                statusText:  sStatus ? (STATUS_TEXT[sStatus] || sStatus) : oBundle.getText("approvalNone"),
                 statusState: STATUS_STATE[sStatus] || "None"
             });
         },
 
-        // visuele route: het VOLLEDIGE traject (alle legs in volgorde, opeenvolgende
-        // duplicaten = overstappen samengevoegd) zodat een retour zichtbaar is als
-        // SHA → PEK → SHA i.p.v. enkel eerste-vertrek → laatste-aankomst (die bij een retour
-        // dezelfde luchthaven zijn). Daarnaast één feiten-kaart per UNIEKE luchthaven.
         _applyRoute: function (aFlights, mByIata) {
             var that = this;
             var oModel = this.getView().getModel("trip");
@@ -174,67 +250,33 @@ sap.ui.define([
                 return (a.StartsAt || "") < (b.StartsAt || "") ? -1 : 1;
             });
             var sNone = this.getResourceBundle().getText("valueNone");
-
-            // naam/stad-hints per IATA uit de legs (een stop kan 'from' op de ene leg en 'to'
-            // op de andere zijn → neem de eerste niet-lege waarde)
             var mHint = {};
             aSorted.forEach(function (f) {
-                if (f.fromIata && !mHint[f.fromIata]) {
-                    mHint[f.fromIata] = { name: f.fromName, city: f.fromCity };
-                }
-                if (f.toIata && !mHint[f.toIata]) {
-                    mHint[f.toIata] = { name: f.toName, city: f.toCity };
-                }
+                if (f.fromIata && !mHint[f.fromIata]) { mHint[f.fromIata] = { name: f.fromName, city: f.fromCity }; }
+                if (f.toIata   && !mHint[f.toIata])   { mHint[f.toIata]   = { name: f.toName,   city: f.toCity   }; }
             });
-
-            // geordend traject from1 → to1 → from2 → … met opeenvolgende duplicaten samengevoegd
             var aSeq = [];
             aSorted.forEach(function (f) {
                 [f.fromIata, f.toIata].forEach(function (sIata) {
-                    if (sIata && aSeq[aSeq.length - 1] !== sIata) {
-                        aSeq.push(sIata);
-                    }
+                    if (sIata && aSeq[aSeq.length - 1] !== sIata) { aSeq.push(sIata); }
                 });
             });
-
-            // keten-knopen: eerste zonder pijl, de rest met een vlucht-icoon ervoor
             var aStops = aSeq.map(function (sIata, i) {
                 var h = mHint[sIata] || {};
-                return {
-                    iata: sIata,
-                    name: that._airportFacts(sIata, h.name, h.city, mByIata).name,
-                    showArrow: i > 0
-                };
+                return { iata: sIata, name: that._airportFacts(sIata, h.name, h.city, mByIata).name, showArrow: i > 0 };
             });
-
-            // unieke luchthavens (op IATA, volgorde van eerste bezoek) voor de feiten-kaarten
             var mSeen = {};
             var aAirports = [];
             aSeq.forEach(function (sIata) {
-                if (mSeen[sIata]) {
-                    return;
-                }
+                if (mSeen[sIata]) { return; }
                 mSeen[sIata] = true;
                 var h = mHint[sIata] || {};
                 var oFacts = that._airportFacts(sIata, h.name, h.city, mByIata);
-                aAirports.push({
-                    iata: sIata,
-                    name: oFacts.name,
-                    city: oFacts.city,
-                    coords: oFacts.coords,
-                    trips: sNone
-                });
+                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city, coords: oFacts.coords, trips: sNone });
             });
-
-            oModel.setProperty("/route", {
-                has: true,
-                stops: aStops,
-                airports: aAirports
-            });
+            oModel.setProperty("/route", { has: true, stops: aStops, airports: aAirports });
         },
 
-        // airport-naam/stad/coördinaten uit het airport-object (IATA-index); valt terug op
-        // de velden van de vlucht als de luchthaven niet in de lijst zit
         _airportFacts: function (sIata, sFlightName, sFlightCity, mByIata) {
             var oAirport = mByIata[(sIata || "").toUpperCase()];
             var sName = (oAirport && oAirport.Name) || sFlightName || sIata || "";
@@ -242,57 +284,43 @@ sap.ui.define([
             var sCoords = "";
             if (oAirport && oAirport.Location) {
                 if (oAirport.Location.City) {
-                    sCity = oAirport.Location.City.Name
-                        + (oAirport.Location.City.CountryRegion
-                            ? ", " + oAirport.Location.City.CountryRegion : "");
+                    sCity = oAirport.Location.City.Name + (oAirport.Location.City.CountryRegion ? ", " + oAirport.Location.City.CountryRegion : "");
                 }
                 var oLoc = oAirport.Location.Loc;
                 if (oLoc && oLoc.coordinates) {
-                    // GeoJSON [lon, lat] → toon "lat, lon"
                     sCoords = oLoc.coordinates[1].toFixed(4) + ", " + oLoc.coordinates[0].toFixed(4);
                 }
             }
             return { name: sName, city: sCity, coords: sCoords };
         },
 
-        // "trips via deze luchthaven" komt uit het zware all-time aggregaat → progressief,
-        // zodat de route + airport-facts meteen renderen
         _loadAirportTripCounts: function () {
             var oModel = this.getView().getModel("trip");
-            if (!oModel.getProperty("/route/has")) {
-                return;
-            }
+            if (!oModel.getProperty("/route/has")) { return; }
             this.getOwnerComponent().getFlightAggregate().then(function (oAgg) {
                 var mBy = oAgg.byAirport || {};
                 var aAirports = oModel.getProperty("/route/airports") || [];
                 aAirports.forEach(function (oA) {
                     oA.trips = mBy[oA.iata] ? String(mBy[oA.iata].trips.length) : "0";
                 });
-                // eigen view-model (geen gedeelde cache) → muteren + setProperty om de
-                // kaart-bindings te verversen
                 oModel.setProperty("/route/airports", aAirports);
             }).catch(function (oError) {
                 Log.error("Loading airport trip counts failed", oError);
             });
         },
 
-        // Gedeelde trip (zelfde ShareId): toon ALLE reizigers (incl. de huidige) en, als de
-        // eigen kopie geen vluchten heeft, leen de vluchten van een mede-reiziger die ze wél
-        // heeft — zodat elke kopie dezelfde route/luchthavens toont (TripPin vult PlanItems
-        // niet op elke kopie van een gedeelde trip).
         _loadSharedTrip: function (oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq) {
             var that = this;
             var oModel = this.getView().getModel("trip");
             var sShareId = oTrip.ShareId;
             this.getOwnerComponent().getTripData().then(function (aPerPerson) {
-                if (iSeq !== that._iLoadSeq) {
-                    return;   // stale: er loopt al een nieuwere load
-                }
+                if (iSeq !== that._iLoadSeq) { return; }
                 var mSeen = {};
                 var aCo = [];
                 var aPairs = [];
                 aPerPerson.forEach(function (oEntry) {
                     oEntry.trips.forEach(function (oT) {
+                        if (oT._isOwn) { return; }
                         if (sShareId && oT.ShareId === sShareId) {
                             aPairs.push({ user: oEntry.person.UserName, tripId: oT.TripId });
                             if (!mSeen[oEntry.person.UserName]) {
@@ -306,13 +334,7 @@ sap.ui.define([
                     });
                 });
                 oModel.setProperty("/coTravellers", aCo);
-
-                // eigen vluchten al getoond → klaar
-                if (aOwnFlights && aOwnFlights.length) {
-                    return;
-                }
-                // leen de vluchten van een andere kopie van dezelfde trip (de huidige kopie =
-                // de meegegeven sUserName/iTripId, niet de — mogelijk al gewijzigde — velden)
+                if (aOwnFlights && aOwnFlights.length) { return; }
                 var aOther = aPairs.filter(function (p) {
                     return !(p.user === sUserName && p.tripId === iTripId);
                 });
@@ -323,18 +345,14 @@ sap.ui.define([
                 Promise.all(aOther.map(function (p) {
                     return that.getOwnerComponent().getCachedFlights(p.user, p.tripId);
                 })).then(function (aResults) {
-                    if (iSeq !== that._iLoadSeq) {
-                        return;
-                    }
+                    if (iSeq !== that._iLoadSeq) { return; }
                     var aBorrowed = aResults.find(function (a) { return a && a.length; }) || [];
                     that._applyFlights(aBorrowed);
                     that._applyRoute(aBorrowed, mByIata || {});
                     that._loadAirportTripCounts();
                 });
             }).catch(function (oError) {
-                if (iSeq !== that._iLoadSeq) {
-                    return;
-                }
+                if (iSeq !== that._iLoadSeq) { return; }
                 Log.error("Loading shared trip failed", oError);
                 oModel.setProperty("/coTravellers", []);
                 oModel.setProperty("/flightsBusy", false);
@@ -354,33 +372,37 @@ sap.ui.define([
             this._navToAirport(oEvent.getSource().getBindingContext("trip").getObject().toIata);
         },
 
-        // cross-navigatie vlucht → luchthaven: open de Airports-tab en zoom in (op IATA)
         _navToAirport: function (sIata) {
-            if (sIata) {
-                this.getRouter().navTo("airportFocus", { iata: sIata });
-            }
+            if (sIata) { this.getRouter().navTo("airportFocus", { iata: sIata }); }
         },
 
         onNavBack: function () {
-            this.getRouter().navTo("employee", {
-                userName: this._sUserName
-            });
+            this.getRouter().navTo("employee", { userName: this._sUserName });
         },
 
-        // ---- Feature 8: approval record (coordinator-only) -----------------
+        onApprove: function () {
+            if (this._bIsOwn) {
+                this._patchOwnTripStatus("approved");
+            } else {
+                this._invokeExtAction("approve");
+            }
+        },
 
-        // Submit = nieuw TripExtension aanmaken (status default 'pending'). Geen velden meer
-        // (company/team horen bij de employee, notes is geschrapt) → een eenvoudige bevestiging.
-        // Knop is uit zodra er al een record bestaat (samengestelde sleutel → geen dubbele create).
+        onReject: function () {
+            if (this._bIsOwn) {
+                this._patchOwnTripStatus("rejected");
+            } else {
+                this._invokeExtAction("rejectTrip");
+            }
+        },
+
         onSubmitApproval: function () {
             var that = this;
             var oBundle = this.getResourceBundle();
             MessageBox.confirm(oBundle.getText("approvalConfirm"), {
                 title: oBundle.getText("btnSubmit"),
                 onClose: function (sAction) {
-                    if (sAction !== MessageBox.Action.OK) {
-                        return;
-                    }
+                    if (sAction !== MessageBox.Action.OK) { return; }
                     that.getOwnerComponent().getModel("trips")
                         .bindList("/TripExtensions")
                         .create({ personUserName: that._sUserName, tripId: that._iTripId })
@@ -395,15 +417,6 @@ sap.ui.define([
             });
         },
 
-        onApprove: function () {
-            this._invokeExtAction("approve");
-        },
-
-        onReject: function () {
-            this._invokeExtAction("rejectTrip");
-        },
-
-        // Bound action op TripExtensions; FQN = TripsService.<actie> (zie EDMX).
         _invokeExtAction: function (sAction) {
             var that = this;
             var oModel = this.getOwnerComponent().getModel("trips");
@@ -418,12 +431,32 @@ sap.ui.define([
             });
         },
 
-        // sleutelpad voor TripExtensions: String-sleutel tussen quotes (' → ''),
-        // Integer-sleutel kaal
+        _patchOwnTripStatus: function (sStatus) {
+            var that = this;
+            var oComp = this.getOwnerComponent();
+            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
+            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+
+            fetch("/trips/OwnTrips('" + this._sTripIdRaw + "')", {
+                method: "PATCH",
+                headers: mHeaders,
+                body: JSON.stringify({ approvalStatus: sStatus })
+            })
+            .then(function (r) {
+                if (!r.ok) { throw new Error("HTTP " + r.status); }
+                MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
+                delete oComp._mTripsCache[that._sUserName];
+                that._loadOwnTrip();
+            })
+            .catch(function (oError) {
+                Log.error("Patch own trip status failed", oError);
+                MessageToast.show(that.getResourceBundle().getText("approvalActionError"));
+            });
+        },
+
         _extPath: function () {
             var sUser = "'" + String(this._sUserName).replace(/'/g, "''") + "'";
             return "/TripExtensions(personUserName=" + sUser + ",tripId=" + this._iTripId + ")";
         }
-
     });
 });

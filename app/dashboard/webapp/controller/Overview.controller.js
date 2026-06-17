@@ -24,6 +24,7 @@ sap.ui.define([
             }), "view");
             this._aAirlines = [];      // volledige airline-lijst → ook airlines met 0 vluchten tonen
             this._aTravellers = [];    // volledige reizigerslijst (count + budget) voor de toggle
+            this._mExt = {};           // live goedkeurings-map → enkel goedgekeurde trips tellen
             this._loadKpis();
         },
 
@@ -38,14 +39,16 @@ sap.ui.define([
                 oComponent.getCachedList("people", "/People"),
                 oComponent.getCachedList("airports", "/Airports"),
                 oComponent.getCachedList("airlines", "/Airlines"),
-                oComponent.getTripData()
+                oComponent.getTripData(),
+                oComponent.getTripExtensions()
             ]).then(function (aResults) {
                 oVM.setProperty("/kpi/employees", String(aResults[0].length));
                 oVM.setProperty("/kpi/airports", String(aResults[1].length));
                 oVM.setProperty("/kpi/airlines", String(aResults[2].length));
                 that._aAirlines = aResults[2];
+                that._mExt = aResults[4] || {};
 
-                that._applyTripMetrics(Aggregate.aggregateTrips(aResults[3], null));
+                that._applyTripMetrics(Aggregate.aggregateTrips(aResults[3], null, that._mExt));
                 oVM.setProperty("/busy", false);
 
                 that._loadFlightAggregates();
@@ -98,7 +101,7 @@ sap.ui.define([
             var oVM = this.getView().getModel("view");
             oVM.setProperty("/flightsBusy", true);
             this.getOwnerComponent().getFlightData().then(function (oRaw) {
-                var oAgg = Aggregate.aggregate(oRaw, oRange, that._aAirlines);
+                var oAgg = Aggregate.aggregate(oRaw, oRange, that._aAirlines, that._mExt);
                 that._applyTripMetrics({
                     trips: oAgg.kpis.trips,
                     budget: oAgg.kpis.budget,

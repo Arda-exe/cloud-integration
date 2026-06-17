@@ -47,18 +47,12 @@ sap.ui.define([
             var oBundle = this.getResourceBundle();
             oVM.setProperty("/busy", true);
 
-            var oExtBinding = oComp.getModel("trips").bindList("/TripExtensions");
-
             Promise.all([
                 oComp.getTripData(),
-                oExtBinding.requestContexts(0, 1000)
+                oComp.getTripExtensions()
             ]).then(function (aResults) {
                 var aPerPerson = aResults[0];
-                var mExt = {};
-                aResults[1].forEach(function (oCtx) {
-                    var o = oCtx.getObject();
-                    mExt[o.personUserName + "|" + o.tripId] = o.approvalStatus;
-                });
+                var mExt = aResults[1] || {};
 
                 // groepeer op ShareId; verrijk de VERSE util-objecten met periode + statusteksten
                 var aGroups = tripGroups.groupTrips(aPerPerson, mExt);
@@ -143,11 +137,15 @@ sap.ui.define([
                 title: oBundle.getText("btnSubmit"),
                 onClose: function (sAction) {
                     if (sAction !== MessageBox.Action.OK) { return; }
-                    that.getOwnerComponent().getModel("trips")
+                    var oComp = that.getOwnerComponent();
+                    oComp.getModel("trips")
                         .bindList("/TripExtensions")
                         .create({ personUserName: oRow.userName, tripId: oRow.tripId })
                         .created().then(function () {
                             MessageToast.show(oBundle.getText("approvalSubmitted"));
+                            // nieuwe TripExtension (notsubmitted → pending) → map + aggregaat evicten
+                            oComp._pTripExt = null;
+                            oComp._pFlightAgg = null;
                             that._loadAllTrips();
                         }).catch(function (oError) {
                             Log.error("Submitting approval record failed", oError);
@@ -189,9 +187,13 @@ sap.ui.define([
             .then(function (r) {
                 if (!r.ok) { throw new Error("HTTP " + r.status); }
                 MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
-                // eigen-trip status leeft in de gedeelde trip-cache → evicten
+                // eigen-trip status leeft in de gedeelde trip-cache → trip- én vlucht-aggregaten
+                // evicten zodat Overview/Employees/Airports de nieuwe status meteen meenemen
                 delete oComp._mTripsCache[oRow.userName];
                 oComp._pTripData = null;
+                oComp._pFlightData = null;
+                oComp._pFlightAgg = null;
+                oComp._pTripExt = null;
                 that._loadAllTrips();
             })
             .catch(function (oError) {
@@ -202,14 +204,18 @@ sap.ui.define([
 
         _invokeExtAction: function (oRow, sAction) {
             var that = this;
-            var oModel = this.getOwnerComponent().getModel("trips");
+            var oComp = this.getOwnerComponent();
+            var oModel = oComp.getModel("trips");
             var sUser = "'" + String(oRow.userName).replace(/'/g, "''") + "'";
             var sPath = "/TripExtensions(personUserName=" + sUser + ",tripId=" + oRow.tripId + ")";
             var oEntityContext = oModel.bindContext(sPath).getBoundContext();
             var oOperation = oModel.bindContext("TripsService." + sAction + "(...)", oEntityContext);
             oOperation.execute().then(function () {
                 MessageToast.show(that.getResourceBundle().getText("approvalActionDone"));
-                // TripExtensions wordt live ingelezen → geen cache-evict nodig
+                // de goedkeuringsstatus is gewijzigd → de gememoïseerde TripExtensions-map en het
+                // vlucht-aggregaat evicten zodat Overview/Employees/Airports meteen kloppen
+                oComp._pTripExt = null;
+                oComp._pFlightAgg = null;
                 that._loadAllTrips();
             }).catch(function (oError) {
                 Log.error("Action " + sAction + " failed", oError);
@@ -348,6 +354,7 @@ sap.ui.define([
                 oComp._pTripData = null;
                 oComp._pFlightData = null;
                 oComp._pFlightAgg = null;
+                oComp._pTripExt = null;
                 that._loadAllTrips();
             })
             .catch(function (oError) {

@@ -86,6 +86,9 @@
                         <Text text="{i18n>colDescription}" />
                     </Column>
                     <Column minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colStatus}" />
+                    </Column>
+                    <Column minScreenWidth="Tablet" demandPopin="true">
                         <Text text="Bron" />
                     </Column>
                 </columns>
@@ -97,9 +100,48 @@
                             <Text text="{parts: ['detail>StartsAt', 'detail>EndsAt'], formatter: '.formatPeriod'}" />
                             <ObjectNumber number="{detail>Budget}" unit="USD" />
                             <Text text="{detail>Description}" maxLines="2" />
+                            <ObjectStatus text="{detail>_statusText}" state="{detail>_statusState}" />
                             <ObjectStatus
                                 text="{= ${detail>_isOwn} ? 'Eigen' : 'TripPin' }"
                                 state="{= ${detail>_isOwn} ? 'Success' : 'None' }" />
+                        </cells>
+                    </ColumnListItem>
+                </items>
+
+            </Table>
+
+            <!-- afgekeurde trips: aparte, gedimde sectie — tellen niet mee in de tegels -->
+            <Table
+                id="rejectedTripsTable"
+                items="{detail>/rejectedTrips}"
+                visible="{= ${detail>/rejectedTrips}.length &gt; 0 }"
+                noDataText="{i18n>tripsNoData}"
+                class="sapUiSmallMarginTop sapUiMediumMarginBottom ppRejected">
+
+                <headerToolbar>
+                    <OverflowToolbar>
+                        <Title text="{i18n>rejectedTripsTitle}" />
+                    </OverflowToolbar>
+                </headerToolbar>
+
+                <columns>
+                    <Column><Text text="{i18n>colTrip}" /></Column>
+                    <Column><Text text="{i18n>colPeriod}" /></Column>
+                    <Column hAlign="End" minScreenWidth="Tablet" demandPopin="true">
+                        <Text text="{i18n>colBudget}" />
+                    </Column>
+                    <Column minScreenWidth="Desktop" demandPopin="true">
+                        <Text text="{i18n>colDescription}" />
+                    </Column>
+                </columns>
+
+                <items>
+                    <ColumnListItem type="Navigation" press=".onTripPress">
+                        <cells>
+                            <ObjectIdentifier title="{detail>Name}" />
+                            <Text text="{parts: ['detail>StartsAt', 'detail>EndsAt'], formatter: '.formatPeriod'}" />
+                            <ObjectNumber number="{detail>Budget}" unit="USD" />
+                            <Text text="{detail>Description}" maxLines="2" />
                         </cells>
                     </ColumnListItem>
                 </items>

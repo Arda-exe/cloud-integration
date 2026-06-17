@@ -32,6 +32,7 @@ sap.ui.define([
             this._pFlightAgg = null;
             this._pAirportsByIata = null;
             this._pPersonExt = null;
+            this._pTripExt = null;
 
             this._bLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
             this._sAuthHeader = null;
@@ -223,7 +224,11 @@ sap.ui.define([
                                 user: oEntry.person.UserName,
                                 tripId: oTrip.TripId,
                                 tripName: oTrip.Name,
-                                shareId: oTrip.ShareId
+                                shareId: oTrip.ShareId,
+                                // goedkeuring per kopie → de aggregatie telt enkel goedgekeurde
+                                // vluchten (eigen trip draagt approvalStatus; TripPin via ext-map)
+                                isOwn: !!oTrip._isOwn,
+                                approvalStatus: oTrip.approvalStatus
                             });
                         });
                     });
@@ -246,12 +251,14 @@ sap.ui.define([
         getFlightAggregate: function () {
             var that = this;
             if (!this._pFlightAgg) {
-                // airlines-lijst meenemen zodat de Overview ook airlines zónder vluchten toont
+                // airlines-lijst meenemen zodat de Overview ook airlines zónder vluchten toont;
+                // de TripExtensions-map → enkel goedgekeurde trips tellen in de aggregaten
                 this._pFlightAgg = Promise.all([
                     this.getFlightData(),
-                    this.getCachedList("airlines", "/Airlines")
+                    this.getCachedList("airlines", "/Airlines"),
+                    this.getTripExtensions()
                 ]).then(function (aResults) {
-                    return Aggregate.aggregate(aResults[0], null, aResults[1]);
+                    return Aggregate.aggregate(aResults[0], null, aResults[1], aResults[2]);
                 }).catch(function (oError) {
                     that._pFlightAgg = null;
                     throw oError;
@@ -301,6 +308,31 @@ sap.ui.define([
                     });
             }
             return this._pPersonExt;
+        },
+
+        // TripExtension (goedkeuringsstatus per TripPin-trip) → map "personUserName|tripId" → status.
+        // Gememoïseerd zoals getPersonExtensions, maar GEËVICT bij elke goedkeurings-mutatie
+        // (approve/reject/submit in AllTrips) zodat de tellende views meteen kloppen. Eigen trips
+        // staan hier NIET in — die dragen approvalStatus in de trip-cache zelf.
+        getTripExtensions: function () {
+            if (!this._pTripExt) {
+                var that = this;
+                this._pTripExt = this.getModel("trips").bindList("/TripExtensions")
+                    .requestContexts(0, 1000)
+                    .then(function (aContexts) {
+                        var mExt = {};
+                        aContexts.forEach(function (oCtx) {
+                            var o = oCtx.getObject();
+                            mExt[o.personUserName + "|" + o.tripId] = o.approvalStatus;
+                        });
+                        return mExt;
+                    })
+                    .catch(function (oError) {
+                        that._pTripExt = null;
+                        throw oError;
+                    });
+            }
+            return this._pTripExt;
         },
 
         needsLogin: function () {

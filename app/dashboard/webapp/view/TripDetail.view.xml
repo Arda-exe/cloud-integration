@@ -98,7 +98,7 @@
                             <Column><Text text="{i18n>colStatus}" /></Column>
                         </columns>
                         <items>
-                            <ColumnListItem>
+                            <ColumnListItem class="{= ${trip>statusKey} === 'rejected' ? 'ppRejected' : '' }">
                                 <cells>
                                     <Link text="{trip>name}" press=".onCoTravellerPress" />
                                     <ObjectNumber number="{trip>budget}" unit="USD" />

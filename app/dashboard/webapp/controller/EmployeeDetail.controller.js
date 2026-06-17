@@ -7,9 +7,14 @@ sap.ui.define([
     "sap/base/Log",
     "primepath/dashboard/util/formatters",
     "primepath/dashboard/util/constants",
-    "primepath/dashboard/util/datePresets"
-], function (BaseController, JSONModel, DateFormat, MessageToast, MessageBox, Log, formatters, constants, datePresets) {
+    "primepath/dashboard/util/datePresets",
+    "primepath/dashboard/util/approval"
+], function (BaseController, JSONModel, DateFormat, MessageToast, MessageBox, Log, formatters, constants, datePresets, approval) {
     "use strict";
+
+    // goedkeuringsstatus → kleur (sap.ui.core.ValueState) + i18n-sleutel (zelfde teksten als All Trips)
+    var STATUS_STATE = { approved: "Success", rejected: "Error", pending: "Warning" };
+    var STATUS_TEXT_KEY = { approved: "appr_approved", rejected: "appr_rejected", pending: "appr_pending" };
 
     return BaseController.extend("primepath.dashboard.controller.EmployeeDetail", {
 
@@ -18,6 +23,7 @@ sap.ui.define([
             this._aAllTrips = [];
             this.getView().setModel(new JSONModel({
                 trips: [],
+                rejectedTrips: [],
                 locationText: "",
                 busy: false,
                 preset: "all",
@@ -25,6 +31,7 @@ sap.ui.define([
                 company: "",
                 counts: { total: 0, upcoming: 0, completed: 0 }
             }), "detail");
+            this._mExt = {};
             this.getRouter().getRoute("employee")
                 .attachPatternMatched(this.onPatternMatched, this);
         },
@@ -43,6 +50,7 @@ sap.ui.define([
             this.byId("tripsRange").setSecondDateValue(null);
             var oDetail = this.getView().getModel("detail");
             oDetail.setProperty("/trips", []);
+            oDetail.setProperty("/rejectedTrips", []);
             oDetail.setProperty("/locationText", "");
             oDetail.setProperty("/preset", "all");
             oDetail.setProperty("/team", "");
@@ -70,12 +78,30 @@ sap.ui.define([
 
         _loadTrips: function (sUserName) {
             var that = this;
+            var oComp = this.getOwnerComponent();
             var oDetail = this.getView().getModel("detail");
             oDetail.setProperty("/busy", true);
 
-            this.getOwnerComponent().getCachedTrips(sUserName).then(function (aTrips) {
+            // trips + de live goedkeurings-map samen → elke trip krijgt zijn afgeleide status
+            Promise.all([
+                oComp.getCachedTrips(sUserName),
+                oComp.getTripExtensions()
+            ]).then(function (aResults) {
                 if (that._sUserName !== sUserName) { return; }
-                that._aAllTrips = aTrips.slice().sort(function (a, b) {
+                var mExt = aResults[1] || {};
+                that._mExt = mExt;
+                var oBundle = that.getResourceBundle();
+                // augmented KOPIEËN (cache-safe) met afgeleide status → badge-kolom + rejected-sectie
+                that._aAllTrips = aResults[0].map(function (oTrip) {
+                    var sKey = approval.statusKey(oTrip, sUserName, mExt);
+                    return Object.assign({}, oTrip, {
+                        _statusKey:   sKey,
+                        _statusText:  sKey === "notsubmitted"
+                            ? oBundle.getText("approvalNone")
+                            : oBundle.getText(STATUS_TEXT_KEY[sKey]),
+                        _statusState: STATUS_STATE[sKey] || "None"
+                    });
+                }).sort(function (a, b) {
                     return a.StartsAt < b.StartsAt ? -1 : 1;
                 });
                 oDetail.setProperty("/counts", that._computeCounts(that._aAllTrips));
@@ -88,18 +114,22 @@ sap.ui.define([
             });
         },
 
+        // tegels tellen enkel GOEDGEKEURDE trips (Totaal/Gepland/Afgerond)
         _computeCounts: function (aTrips) {
             var iNow = Date.now();
+            var iTotal = 0;
             var iUpcoming = 0;
             var iCompleted = 0;
-            aTrips.forEach(function (oTrip) {
+            (aTrips || []).forEach(function (oTrip) {
+                if (!approval.isApproved(oTrip._statusKey)) { return; }
+                iTotal++;
                 if (new Date(oTrip.StartsAt).getTime() > iNow) {
                     iUpcoming++;
                 } else if (new Date(oTrip.EndsAt).getTime() < iNow) {
                     iCompleted++;
                 }
             });
-            return { total: aTrips.length, upcoming: iUpcoming, completed: iCompleted };
+            return { total: iTotal, upcoming: iUpcoming, completed: iCompleted };
         },
 
         onDateRangeChange: function () {
@@ -131,7 +161,15 @@ sap.ui.define([
                         && new Date(oTrip.StartsAt).getTime() <= iTo;
                 });
             }
-            this.getView().getModel("detail").setProperty("/trips", aTrips);
+            // hoofdlijst = alles behalve afgekeurd (goedgekeurd telt; pending/niet-ingediend
+            // blijven zichtbaar met badge), afgekeurde trips krijgen hun eigen sectie eronder
+            var oDetail = this.getView().getModel("detail");
+            oDetail.setProperty("/trips", aTrips.filter(function (oTrip) {
+                return oTrip._statusKey !== "rejected";
+            }));
+            oDetail.setProperty("/rejectedTrips", aTrips.filter(function (oTrip) {
+                return oTrip._statusKey === "rejected";
+            }));
         },
 
         onOpenLocation: function (oEvent) {
@@ -169,7 +207,9 @@ sap.ui.define([
             var iDayStart = oDate.getTime();
             var iDayEnd = iDayStart + constants.MS_PER_DAY - 1;
             var oTrip = this._aAllTrips.find(function (t) {
-                return new Date(t.StartsAt).getTime() <= iDayEnd
+                // enkel goedgekeurde trips plaatsen de persoon effectief "op reis"
+                return approval.isApproved(t._statusKey)
+                    && new Date(t.StartsAt).getTime() <= iDayEnd
                     && new Date(t.EndsAt).getTime() >= iDayStart;
             });
 

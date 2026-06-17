@@ -5,8 +5,9 @@ sap.ui.define([
     "sap/m/MessageToast",
     "sap/base/Log",
     "primepath/dashboard/util/formatters",
-    "primepath/dashboard/util/tripGroups"
-], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, tripGroups) {
+    "primepath/dashboard/util/tripGroups",
+    "primepath/dashboard/util/approval"
+], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, tripGroups, approval) {
     "use strict";
 
     var STATUS_STATE = {
@@ -108,12 +109,15 @@ sap.ui.define([
                 });
                 oModel.setProperty("/personName", that._sUserName);
                 oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
-                // eigen trip = één reiziger → totaal = eigen budget
-                oModel.setProperty("/totalBudget", oTrip.budget || 0);
+                // eigen trip = één reiziger → totaal = eigen budget, maar enkel als de trip telt
+                // (goedgekeurd/in behandeling); afgekeurd → 0
+                oModel.setProperty("/totalBudget",
+                    approval.countsInBudget(sStatus) ? (oTrip.budget || 0) : 0);
                 oModel.setProperty("/members", [{
                     userName:    that._sUserName,
                     name:        that._sUserName,
                     budget:      oTrip.budget,
+                    statusKey:   sStatus,
                     statusText:  that._statusText(sStatus),
                     statusState: STATUS_STATE[sStatus] || "None"
                 }]);
@@ -278,19 +282,15 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("trip");
             var oComp = this.getOwnerComponent();
-            var oExtBinding = oComp.getModel("trips").bindList("/TripExtensions");
 
+            // zelfde gememoïseerde goedkeurings-map als de tellende views (Component.getTripExtensions)
             Promise.all([
                 oComp.getTripData(),
-                oExtBinding.requestContexts(0, 1000)
+                oComp.getTripExtensions()
             ]).then(function (aResults) {
                 if (iSeq !== that._iLoadSeq) { return; }
                 var aPerPerson = aResults[0];
-                var mExt = {};
-                aResults[1].forEach(function (oCtx) {
-                    var o = oCtx.getObject();
-                    mExt[o.personUserName + "|" + o.tripId] = o.approvalStatus;
-                });
+                var mExt = aResults[1] || {};
 
                 var aGroups = tripGroups.groupTrips(aPerPerson, mExt);
                 var oGroup = aGroups.find(function (g) {
@@ -303,6 +303,7 @@ sap.ui.define([
                         userName:    m.userName,
                         name:        m.fullName,
                         budget:      m.budget,
+                        statusKey:   m.statusKey,
                         statusText:  that._statusText(m.statusKey),
                         statusState: STATUS_STATE[m.statusKey] || "None"
                     };

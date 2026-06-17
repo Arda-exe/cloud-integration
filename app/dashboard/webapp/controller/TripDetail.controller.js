@@ -67,50 +67,74 @@ sap.ui.define([
 
         _loadOwnTrip: function () {
             var that = this;
+            var iSeq = ++this._iLoadSeq;
+            var sUserName = this._sUserName;
+            var sTripIdRaw = this._sTripIdRaw;
             var oModel = this.getView().getModel("trip");
             var oComp = this.getOwnerComponent();
 
+            // flightsBusy:true → de routeblok-leegstaat flitst niet voordat de vluchten geladen zijn
             oModel.setData({
                 busy: true, personName: this._sUserName, periodText: "",
-                trip: {}, totalBudget: 0, members: [], flights: [], flightsBusy: false,
+                trip: {}, totalBudget: 0, members: [], flights: [], flightsBusy: true,
                 route: { has: false }
             });
 
             var mHeaders = { Accept: "application/json" };
             if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
 
-            fetch("/trips/OwnTrips(" + this._sTripIdRaw + ")", { headers: mHeaders })
-                .then(function (r) {
-                    if (!r.ok) { throw new Error("HTTP " + r.status); }
-                    return r.json();
-                })
-                .then(function (oTrip) {
-                    var sStatus = oTrip.approvalStatus || "pending";
-                    oModel.setProperty("/trip", {
-                        Name:        oTrip.name,
-                        Budget:      oTrip.budget,
-                        Description: oTrip.description || oTrip.destination || ""
-                    });
-                    oModel.setProperty("/personName", that._sUserName);
-                    oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
-                    // eigen trip = één reiziger → totaal = eigen budget
-                    oModel.setProperty("/totalBudget", oTrip.budget || 0);
-                    oModel.setProperty("/members", [{
-                        userName:    that._sUserName,
-                        name:        that._sUserName,
-                        budget:      oTrip.budget,
-                        statusText:  that._statusText(sStatus),
-                        statusState: STATUS_STATE[sStatus] || "None"
-                    }]);
-                    oModel.setProperty("/busy", false);
-                    oModel.setProperty("/flightsBusy", false);
-                })
-                .catch(function (oError) {
-                    Log.error("Loading own trip failed", oError);
-                    oModel.setProperty("/busy", false);
-                    oModel.setProperty("/flightsBusy", false);
-                    MessageToast.show(that.getResourceBundle().getText("tripLoadError"));
+            // trip + vluchten in ÉÉN Promise.all (net als de TripPin-tak): zo renderen de
+            // vluchten/route nooit op een trip waarvan de header niet laadde. getCachedFlights en
+            // getAirportsByIata vangen hun eigen fout op → alleen de OwnTrips-fetch kan rejecten.
+            Promise.all([
+                fetch("/trips/OwnTrips(" + sTripIdRaw + ")", { headers: mHeaders })
+                    .then(function (r) {
+                        if (!r.ok) { throw new Error("HTTP " + r.status); }
+                        return r.json();
+                    }),
+                oComp.getCachedFlights(sUserName, sTripIdRaw),
+                oComp.getAirportsByIata().catch(function () { return {}; })
+            ]).then(function (aResults) {
+                if (iSeq !== that._iLoadSeq) { return; }
+                var oTrip = aResults[0];
+                var aFlights = aResults[1];
+                var mByIata = aResults[2];
+
+                var sStatus = oTrip.approvalStatus || "pending";
+                oModel.setProperty("/trip", {
+                    Name:        oTrip.name,
+                    Budget:      oTrip.budget,
+                    Description: oTrip.description || oTrip.destination || ""
                 });
+                oModel.setProperty("/personName", that._sUserName);
+                oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
+                // eigen trip = één reiziger → totaal = eigen budget
+                oModel.setProperty("/totalBudget", oTrip.budget || 0);
+                oModel.setProperty("/members", [{
+                    userName:    that._sUserName,
+                    name:        that._sUserName,
+                    budget:      oTrip.budget,
+                    statusText:  that._statusText(sStatus),
+                    statusState: STATUS_STATE[sStatus] || "None"
+                }]);
+                oModel.setProperty("/busy", false);
+
+                // vluchten identiek toegepast als bij een TripPin-trip (tabel + routeblok + tellers)
+                if (aFlights && aFlights.length) {
+                    that._applyFlights(aFlights);
+                    that._applyRoute(aFlights, mByIata);
+                    that._loadAirportTripCounts();
+                } else {
+                    oModel.setProperty("/flightsBusy", false);
+                }
+            })
+            .catch(function (oError) {
+                if (iSeq !== that._iLoadSeq) { return; }
+                Log.error("Loading own trip failed", oError);
+                oModel.setProperty("/busy", false);
+                oModel.setProperty("/flightsBusy", false);
+                MessageToast.show(that.getResourceBundle().getText("tripLoadError"));
+            });
         },
 
         _loadTripPinTrip: function () {

@@ -23,6 +23,13 @@ sap.ui.define([
                 people: [], count: 0, busy: true,
                 teamOptions: [], companyOptions: []
             }), "view");
+            // bij elke navigatie naar deze tab herladen, zodat een nieuw aangemaakte trip de
+            // afgeleide status (upcoming/traveling) meteen bijwerkt (cache is al geëvict bij create)
+            this.getRouter().getRoute("employees")
+                .attachPatternMatched(this.onPatternMatched, this);
+        },
+
+        onPatternMatched: function () {
             this._loadPeople();
         },
 

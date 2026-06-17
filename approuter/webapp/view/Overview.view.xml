@@ -1,0 +1,157 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.Overview"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:f="sap.f"
+    xmlns:card="sap.f.cards"
+    xmlns:app="http://schemas.sap.com/sapui5/extension/sap.ui.core.CustomData/1"
+    xmlns="sap.m">
+
+    <Page showHeader="false">
+        <content>
+            <VBox class="sapUiMediumMargin" busy="{view>/busy}" busyIndicatorDelay="100">
+
+                <OverflowToolbar class="sapUiSmallMarginBottom">
+                    <Title text="{i18n>overviewPeriodTitle}" />
+                    <ToolbarSpacer />
+                    <!-- snelkeuze-knoppen; de actieve wordt benadrukt, een handmatig bereik wist ze -->
+                    <Button text="{i18n>periodAll}" app:period="all" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'all' ? 'Emphasized' : 'Transparent' }" />
+                    <Button text="{i18n>periodLastMonth}" app:period="month" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'month' ? 'Emphasized' : 'Transparent' }" />
+                    <Button text="{i18n>periodLast3Months}" app:period="quarter" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'quarter' ? 'Emphasized' : 'Transparent' }" />
+                    <Button text="{i18n>periodLastYear}" app:period="year" press=".onPresetPress"
+                        type="{= ${view>/preset} === 'year' ? 'Emphasized' : 'Transparent' }" />
+                    <DateRangeSelection
+                        id="overviewPeriod"
+                        width="18rem"
+                        placeholder="{i18n>overviewPeriodPlaceholder}"
+                        change=".onPeriodChange" />
+                </OverflowToolbar>
+
+                <FlexBox wrap="Wrap">
+                    <GenericTile header="{i18n>kpiEmployees}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/employees}" icon="sap-icon://employee" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiTrips}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/trips}" icon="sap-icon://travel-itinerary" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiBudget}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
+                        <TileContent unit="USD">
+                            <NumericContent value="{view>/kpi/budget}" scale="{view>/kpi/budgetScale}" icon="sap-icon://money-bills" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiAirports}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/airports}" icon="sap-icon://flight" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                    <GenericTile header="{i18n>kpiAirlines}" width="100%" class="sapUiTinyMargin">
+                        <layoutData>
+                            <FlexItemData growFactor="1" baseSize="11rem" />
+                        </layoutData>
+                        <TileContent>
+                            <NumericContent value="{view>/kpi/airlines}" icon="sap-icon://globe" withMargin="false" />
+                        </TileContent>
+                    </GenericTile>
+                </FlexBox>
+
+                <!-- drie even hoge kaarten (24rem); de inhoud scrollt als ze overloopt -->
+                <FlexBox wrap="Wrap" alignItems="Stretch">
+                    <f:Card height="24rem" class="sapUiSmallMargin">
+                        <f:layoutData>
+                            <FlexItemData growFactor="1" baseSize="22rem" />
+                        </f:layoutData>
+                        <f:header>
+                            <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
+                        </f:header>
+                        <f:content>
+                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+                                <List items="{view>/topTravellers}" showSeparators="Inner">
+                                    <StandardListItem
+                                        title="{view>name}"
+                                        info="{view>tripsLabel}"
+                                        icon="sap-icon://customer"
+                                        iconDensityAware="false" />
+                                </List>
+                            </ScrollContainer>
+                        </f:content>
+                    </f:Card>
+
+                    <f:Card height="24rem" class="sapUiSmallMargin"
+                        busy="{view>/flightsBusy}" busyIndicatorDelay="100">
+                        <f:layoutData>
+                            <FlexItemData growFactor="1" baseSize="22rem" />
+                        </f:layoutData>
+                        <f:header>
+                            <card:Header title="{i18n>topAirlinesTitle}" iconSrc="sap-icon://flight" />
+                        </f:header>
+                        <f:content>
+                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+                                <!-- één balk per airline; relatief t.o.v. de drukste (percent),
+                                     airlines met 0 vluchten tonen een lege balk + "0 flights" -->
+                                <VBox class="sapUiSmallMargin" items="{view>/topAirlines}">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Label text="{view>name}" design="Bold" />
+                                        <ProgressIndicator
+                                            class="sapUiTinyMarginTop"
+                                            percentValue="{view>percent}"
+                                            displayValue="{view>info}"
+                                            showValue="true"
+                                            state="Success"
+                                            height="1.25rem" />
+                                    </VBox>
+                                </VBox>
+                            </ScrollContainer>
+                        </f:content>
+                    </f:Card>
+
+                    <f:Card height="24rem" class="sapUiSmallMargin"
+                        busy="{view>/flightsBusy}" busyIndicatorDelay="100">
+                        <f:layoutData>
+                            <FlexItemData growFactor="1" baseSize="22rem" />
+                        </f:layoutData>
+                        <f:header>
+                            <card:Header title="{i18n>topRoutesTitle}" iconSrc="sap-icon://journey-arrive" />
+                        </f:header>
+                        <f:content>
+                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
+                                <VBox class="sapUiSmallMargin" items="{view>/topRoutes}">
+                                    <VBox class="sapUiTinyMarginBottom">
+                                        <Label text="{view>name}" design="Bold" />
+                                        <ProgressIndicator
+                                            class="sapUiTinyMarginTop"
+                                            percentValue="{view>percent}"
+                                            displayValue="{view>info}"
+                                            showValue="true"
+                                            state="Information"
+                                            height="1.25rem" />
+                                    </VBox>
+                                </VBox>
+                            </ScrollContainer>
+                        </f:content>
+                    </f:Card>
+                </FlexBox>
+
+            </VBox>
+        </content>
+    </Page>
+
+</mvc:View>

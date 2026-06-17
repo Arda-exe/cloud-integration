@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrimePath Travel</title>
+    <script
+        id="sap-ui-bootstrap"
+        src="https://ui5.sap.com/1.136/resources/sap-ui-core.js"
+        data-sap-ui-theme="sap_fiori_3"
+        data-sap-ui-async="true"
+        data-sap-ui-compat-version="edge"
+        data-sap-ui-on-init="module:sap/ui/core/ComponentSupport"
+        data-sap-ui-resource-roots='{"primepath.dashboard": "./"}'>
+    </script>
+    <!-- Leaflet voor de kaart op de Airports-tab (sap.ui.vbm zit niet in de CDN-distributie).
+         defer: niet-blokkerend voor de eerste paint; Airports._initMap guardt op window.L
+         en draait opnieuw bij het tonen van de tab, dus laden ná de parse is veilig. -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        /* de app-shell (VBox) gebruikt 100vh; alleen de body-marge moet weg */
+        html, body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="sapUiBody" id="content">
+    <div id="container"
+         data-sap-ui-component
+         data-name="primepath.dashboard"
+         data-settings='{"id": "dashboard"}'></div>
+</body>
+</html>

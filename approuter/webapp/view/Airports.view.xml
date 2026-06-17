@@ -1,0 +1,86 @@
+<mvc:View
+    controllerName="primepath.dashboard.controller.Airports"
+    displayBlock="true"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns:core="sap.ui.core"
+    xmlns="sap.m">
+
+    <Page showHeader="false" backgroundDesign="List">
+        <content>
+            <HBox height="82vh" class="sapUiSmallMargin">
+
+                <!-- kaart vult de overige breedte -->
+                <core:HTML content='&lt;div id="airportsMap" style="height: 100%; width: 100%;"&gt;&lt;/div&gt;'>
+                    <core:layoutData>
+                        <FlexItemData growFactor="1" baseSize="0%" />
+                    </core:layoutData>
+                </core:HTML>
+
+                <!-- vast rechterpaneel: lijst ↔ detail via NavContainer -->
+                <NavContainer id="airportNav" width="26rem" class="sapUiSmallMarginBegin">
+
+                    <Page id="airportListPage" title="{i18n>airportsTableTitle} ({view>/count})">
+                        <subHeader>
+                            <Toolbar>
+                                <SearchField
+                                    id="airportsSearch"
+                                    placeholder="{i18n>airportsSearchPlaceholder}"
+                                    liveChange=".onSearch" />
+                            </Toolbar>
+                        </subHeader>
+                        <List
+                            items="{view>/airports}"
+                            noDataText="{i18n>airportsNoData}">
+                            <StandardListItem
+                                title="{view>Name}"
+                                description="{view>IataCode} / {view>Location/City/Name}"
+                                type="Navigation"
+                                press=".onAirportPress" />
+                        </List>
+                    </Page>
+
+                    <Page
+                        id="airportDetailPage"
+                        title="{view>/selected/name}"
+                        showNavButton="true"
+                        navButtonPress=".onCloseAirportPanel">
+                        <VBox class="sapUiSmallMargin">
+                            <HBox class="sapUiTinyMarginBottom">
+                                <Label text="{i18n>colIata} / {i18n>colIcao}" width="8rem" />
+                                <Text text="{view>/selected/iata} &#183; {view>/selected/icao}" />
+                            </HBox>
+                            <HBox class="sapUiTinyMarginBottom">
+                                <Label text="{i18n>colCity}" width="8rem" />
+                                <Text text="{view>/selected/city}, {view>/selected/country}" />
+                            </HBox>
+                            <VBox busy="{view>/selected/busy}" busyIndicatorDelay="200">
+                                <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                                    <Label text="{i18n>lblTraffic}" width="8rem" />
+                                    <ObjectStatus text="{view>/selected/trafficText}" state="{view>/selected/trafficState}" />
+                                </HBox>
+                                <HBox class="sapUiTinyMarginBottom">
+                                    <Label text="{i18n>lblFlightsVia}" width="8rem" />
+                                    <Text text="{view>/selected/flights}" />
+                                </HBox>
+                                <List
+                                    headerText="{i18n>tripsViaTitle}"
+                                    items="{view>/selected/trips}"
+                                    noDataText="{i18n>tripsViaNoData}"
+                                    growing="true"
+                                    growingThreshold="20">
+                                    <StandardListItem
+                                        title="{view>tripName}"
+                                        description="{view>travellersText}"
+                                        type="Navigation"
+                                        press=".onSelectedTripPress" />
+                                </List>
+                            </VBox>
+                        </VBox>
+                    </Page>
+
+                </NavContainer>
+            </HBox>
+        </content>
+    </Page>
+
+</mvc:View>

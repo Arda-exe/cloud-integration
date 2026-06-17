@@ -123,7 +123,6 @@ sap.ui.define([
                 if (aFlights && aFlights.length) {
                     that._applyFlights(aFlights);
                     that._applyRoute(aFlights, mByIata);
-                    that._loadAirportTripCounts();
                 } else {
                     oModel.setProperty("/flightsBusy", false);
                 }
@@ -184,7 +183,6 @@ sap.ui.define([
                 if (aOwnFlights && aOwnFlights.length) {
                     that._applyFlights(aOwnFlights);
                     that._applyRoute(aOwnFlights, mByIata);
-                    that._loadAirportTripCounts();
                 }
                 that._loadSharedTrip(oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq);
             }).catch(function (oError) {
@@ -236,7 +234,6 @@ sap.ui.define([
             var aSorted = aFlights.slice().sort(function (a, b) {
                 return (a.StartsAt || "") < (b.StartsAt || "") ? -1 : 1;
             });
-            var sNone = this.getResourceBundle().getText("valueNone");
             var mHint = {};
             aSorted.forEach(function (f) {
                 if (f.fromIata && !mHint[f.fromIata]) { mHint[f.fromIata] = { name: f.fromName, city: f.fromCity }; }
@@ -259,7 +256,7 @@ sap.ui.define([
                 mSeen[sIata] = true;
                 var h = mHint[sIata] || {};
                 var oFacts = that._airportFacts(sIata, h.name, h.city, mByIata);
-                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city, trips: sNone });
+                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city });
             });
             oModel.setProperty("/route", { has: true, stops: aStops, airports: aAirports });
         },
@@ -272,21 +269,6 @@ sap.ui.define([
                 sCity = oAirport.Location.City.Name + (oAirport.Location.City.CountryRegion ? ", " + oAirport.Location.City.CountryRegion : "");
             }
             return { name: sName, city: sCity };
-        },
-
-        _loadAirportTripCounts: function () {
-            var oModel = this.getView().getModel("trip");
-            if (!oModel.getProperty("/route/has")) { return; }
-            this.getOwnerComponent().getFlightAggregate().then(function (oAgg) {
-                var mBy = oAgg.byAirport || {};
-                var aAirports = oModel.getProperty("/route/airports") || [];
-                aAirports.forEach(function (oA) {
-                    oA.trips = mBy[oA.iata] ? String(mBy[oA.iata].trips.length) : "0";
-                });
-                oModel.setProperty("/route/airports", aAirports);
-            }).catch(function (oError) {
-                Log.error("Loading airport trip counts failed", oError);
-            });
         },
 
         // De pagina is identiek vanuit elke kopie: groepeer op ShareId → combineer budgetten,

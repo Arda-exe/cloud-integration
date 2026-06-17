@@ -62,9 +62,6 @@
                     <Column minScreenWidth="Tablet" demandPopin="true">
                         <Text text="{i18n>colCompany}" />
                     </Column>
-                    <Column minScreenWidth="Tablet" demandPopin="true">
-                        <Text text="{i18n>colUserName}" />
-                    </Column>
                     <Column minScreenWidth="Desktop" demandPopin="true">
                         <Text text="{i18n>colEmail}" />
                     </Column>
@@ -77,7 +74,6 @@
                             <ObjectStatus text="{view>statusText}" state="{view>statusState}" />
                             <Text text="{view>team}" />
                             <Text text="{view>company}" />
-                            <Text text="{view>UserName}" />
                             <Text text="{path: 'view>Emails', targetType: 'any', formatter: '.formatEmails'}" />
                         </cells>
                     </ColumnListItem>

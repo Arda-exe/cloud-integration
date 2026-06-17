@@ -91,15 +91,21 @@ sap.ui.define([
             if (aTrips.length) {
                 aTravellers.push({
                     name: (oEntry.person.FirstName || "") + " " + (oEntry.person.LastName || ""),
-                    count: aTrips.length
+                    count: aTrips.length,
+                    budget: aTrips.reduce(function (f, oTrip) {
+                        return f + (oTrip.Budget || 0);
+                    }, 0)
                 });
             }
         });
         aTravellers.sort(function (a, b) { return b.count - a.count; });
+        // volledige lijst (met count + budget) → de Overview-controller sorteert op de
+        // gekozen maatstaf en neemt dan pas de Top-N (anders zou "op budget" enkel de
+        // trip-count-Top-N herschikken)
         return {
             trips: iTrips,
             budget: fBudget,
-            topTravellers: aTravellers.slice(0, constants.TOP_N)
+            topTravellers: aTravellers
         };
     }
 

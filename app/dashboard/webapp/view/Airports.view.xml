@@ -53,10 +53,6 @@
                                 <Label text="{i18n>colCity}" width="8rem" />
                                 <Text text="{view>/selected/city}, {view>/selected/country}" />
                             </HBox>
-                            <HBox class="sapUiTinyMarginBottom">
-                                <Label text="{i18n>lblCoordinates}" width="8rem" />
-                                <Text text="{view>/selected/coords}" />
-                            </HBox>
                             <VBox busy="{view>/selected/busy}" busyIndicatorDelay="200">
                                 <HBox alignItems="Center" class="sapUiTinyMarginBottom">
                                     <Label text="{i18n>lblTraffic}" width="8rem" />

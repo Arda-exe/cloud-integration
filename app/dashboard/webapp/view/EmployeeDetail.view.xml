@@ -18,7 +18,11 @@
                     <Label text="{i18n>lblEmail}" class="sapUiTinyMarginEnd" />
                     <Text text="{path: 'people>Emails', targetType: 'any', formatter: '.formatEmails'}" class="sapUiMediumMarginEnd" />
                     <Label text="{i18n>lblCity}" class="sapUiTinyMarginEnd" />
-                    <Text text="{path: 'people>AddressInfo', targetType: 'any', formatter: '.formatCity'}" />
+                    <Text text="{path: 'people>AddressInfo', targetType: 'any', formatter: '.formatCity'}" class="sapUiMediumMarginEnd" />
+                    <Label text="{i18n>colTeam}" class="sapUiTinyMarginEnd" visible="{= !!${detail>/team} }" />
+                    <Text text="{detail>/team}" class="sapUiMediumMarginEnd" visible="{= !!${detail>/team} }" />
+                    <Label text="{i18n>colCompany}" class="sapUiTinyMarginEnd" visible="{= !!${detail>/company} }" />
+                    <Text text="{detail>/company}" visible="{= !!${detail>/company} }" />
                 </HBox>
             </VBox>
 
@@ -52,12 +56,6 @@
                     <OverflowToolbar>
                         <Title text="{i18n>tripsTitle}" />
                         <ToolbarSpacer />
-                        <Button
-                            text="+ Nieuwe Trip"
-                            type="Emphasized"
-                            icon="sap-icon://add"
-                            visible="{app>/user/isCoordinator}"
-                            press=".onCreateTrip" />
                         <Button
                             icon="sap-icon://map"
                             text="{i18n>btnLocateOnDate}"

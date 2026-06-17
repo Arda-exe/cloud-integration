@@ -63,8 +63,7 @@
             "libs": {
                 "sap.ui.core": {},
                 "sap.m": {},
-                "sap.f": {},
-                "sap.suite.ui.microchart": {}
+                "sap.f": {}
             }
         },
         "contentDensities": {
@@ -159,6 +158,11 @@
                     "name": "trip",
                     "pattern": "employees/{userName}/trips/{tripId}",
                     "target": "trip"
+                },
+                {
+                    "name": "allTrips",
+                    "pattern": "alltrips",
+                    "target": "allTrips"
                 }
             ],
             "targets": {
@@ -185,6 +189,10 @@
                 "trip": {
                     "name": "TripDetail",
                     "viewId": "tripDetail"
+                },
+                "allTrips": {
+                    "name": "AllTrips",
+                    "viewId": "allTrips"
                 }
             }
         }

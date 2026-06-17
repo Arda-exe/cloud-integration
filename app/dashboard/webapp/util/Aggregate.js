@@ -42,11 +42,14 @@ sap.ui.define([
         return iDep >= b.from && iDep <= b.to;
     }
 
-    function topN(mMap, fnMap) {
+    // alle entries gesorteerd op count (aflopend), daarna alfabetisch op label —
+    // de Overview toont nu álle airlines en routes (scrollbaar), geen top-N-cap meer
+    function sortedAll(mMap, sLabelKey, fnMap) {
         return Object.keys(mMap)
             .map(function (sK) { return mMap[sK]; })
-            .sort(function (a, b) { return b.count - a.count; })
-            .slice(0, constants.TOP_N)
+            .sort(function (a, b) {
+                return (b.count - a.count) || (a[sLabelKey] < b[sLabelKey] ? -1 : 1);
+            })
             .map(fnMap);
     }
 
@@ -102,11 +105,22 @@ sap.ui.define([
 
     // volledige aggregatie: trip-metrics + vlucht-gebaseerde top airlines/routes + byAirport
     // oRaw = { perPerson: [{person, trips}], pairs: [{user, tripId, tripName, flights:[]}] }
-    function aggregate(oRaw, oRange) {
+    // aAllAirlines (optioneel) = de volledige /Airlines-lijst; airlines zónder vluchten
+    // worden zo met count 0 meegenomen in de Overview-lijst
+    function aggregate(oRaw, oRange, aAllAirlines) {
         var oTrip = aggregateTrips(oRaw.perPerson, oRange);
         var mAir = {};
         var mRoute = {};
         var mAirport = {};
+
+        (aAllAirlines || []).forEach(function (oAirline) {
+            if (oAirline && oAirline.AirlineCode) {
+                mAir[oAirline.AirlineCode] = {
+                    name: oAirline.Name || oAirline.AirlineCode,
+                    count: 0
+                };
+            }
+        });
 
         // alle reizigers per gedeelde trip (ShareId) — zodat de "trips via deze luchthaven"-
         // teller hetzelfde betekent als de co-travellers op de trip-detail (iedereen op de trip,
@@ -169,10 +183,10 @@ sap.ui.define([
         return {
             kpis: { trips: oTrip.trips, budget: oTrip.budget },
             topTravellers: oTrip.topTravellers,
-            topAirlines: topN(mAir, function (o) {
+            topAirlines: sortedAll(mAir, "name", function (o) {
                 return { name: o.name, count: o.count };
             }),
-            topRoutes: topN(mRoute, function (o) {
+            topRoutes: sortedAll(mRoute, "label", function (o) {
                 return { label: o.label, sub: o.sub, count: o.count };
             }),
             byAirport: byAirport

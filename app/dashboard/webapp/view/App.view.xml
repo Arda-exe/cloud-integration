@@ -20,6 +20,15 @@
                     placeholder="{i18n>globalSearchPlaceholder}"
                     search=".onGlobalSearch" />
             </f:searchManager>
+            <!-- kleine indicator van de ingelogde gebruiker (initialen + tooltip met user-id);
+                 alleen binnen de app, niet op de launchpad -->
+            <f:profile>
+                <Avatar
+                    initials="{app>/user/initials}"
+                    displaySize="XS"
+                    visible="{app>/showChrome}"
+                    tooltip="{= ${i18n>loggedInAs} + ' ' + ${app>/user/id} }" />
+            </f:profile>
         </f:ShellBar>
 
         <IconTabHeader

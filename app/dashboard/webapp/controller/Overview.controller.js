@@ -21,6 +21,7 @@ sap.ui.define([
                 topAirlines: [],
                 topRoutes: []
             }), "view");
+            this._aAirlines = [];   // volledige airline-lijst → ook airlines met 0 vluchten tonen
             this._loadKpis();
         },
 
@@ -40,6 +41,7 @@ sap.ui.define([
                 oVM.setProperty("/kpi/employees", String(aResults[0].length));
                 oVM.setProperty("/kpi/airports", String(aResults[1].length));
                 oVM.setProperty("/kpi/airlines", String(aResults[2].length));
+                that._aAirlines = aResults[2];
 
                 that._applyTripMetrics(Aggregate.aggregateTrips(aResults[3], null));
                 oVM.setProperty("/busy", false);
@@ -94,7 +96,7 @@ sap.ui.define([
             var oVM = this.getView().getModel("view");
             oVM.setProperty("/flightsBusy", true);
             this.getOwnerComponent().getFlightData().then(function (oRaw) {
-                var oAgg = Aggregate.aggregate(oRaw, oRange);
+                var oAgg = Aggregate.aggregate(oRaw, oRange, that._aAirlines);
                 that._applyTripMetrics({
                     trips: oAgg.kpis.trips,
                     budget: oAgg.kpis.budget,
@@ -132,11 +134,26 @@ sap.ui.define([
             var oVM = this.getView().getModel("view");
             var oBundle = this.getResourceBundle();
 
+            // percent = aandeel t.o.v. de drukste airline/route → balklengte van de ProgressIndicator
+            var iAirlineMax = oAgg.topAirlines.reduce(function (m, o) { return Math.max(m, o.count); }, 0);
             oVM.setProperty("/topAirlines", oAgg.topAirlines.map(function (o) {
-                return { name: o.name, count: o.count, info: oBundle.getText("topFlightsCount", [o.count]) };
+                return {
+                    name: o.name,
+                    count: o.count,
+                    percent: iAirlineMax ? Math.round(o.count / iAirlineMax * 100) : 0,
+                    info: oBundle.getText("topFlightsCount", [o.count])
+                };
             }));
+
+            var iRouteMax = oAgg.topRoutes.reduce(function (m, o) { return Math.max(m, o.count); }, 0);
             oVM.setProperty("/topRoutes", oAgg.topRoutes.map(function (o) {
-                return { name: o.label, sub: o.sub, count: o.count, info: oBundle.getText("topRoutesCount", [o.count]) };
+                return {
+                    name: o.label,
+                    sub: o.sub,
+                    count: o.count,
+                    percent: iRouteMax ? Math.round(o.count / iRouteMax * 100) : 0,
+                    info: oBundle.getText("topRoutesCount", [o.count])
+                };
             }));
         }
 

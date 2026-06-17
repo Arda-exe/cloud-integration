@@ -28,13 +28,14 @@ sap.ui.define([
             this._pFlightData = null;
             this._pFlightAgg = null;
             this._pAirportsByIata = null;
+            this._pPersonExt = null;
 
             this._bLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
             this._sAuthHeader = null;
 
             this.setModel(new JSONModel({
                 showChrome: false,
-                user: { id: "", roles: [], isCoordinator: false, roleLabel: "" }
+                user: { id: "", initials: "", roles: [], isCoordinator: false, roleLabel: "" }
             }), "app");
 
             this.getRouter().initialize();
@@ -90,13 +91,14 @@ sap.ui.define([
                     .then(function (json) {
                         return (json.value || []).map(function (o) {
                             return {
-                                TripId:      o.tripId,
-                                Name:        o.name,
-                                StartsAt:    o.startsAt,
-                                EndsAt:      o.endsAt,
-                                Budget:      o.budget,
-                                Description: o.description || o.destination || "",
-                                _isOwn:      true
+                                TripId:         o.tripId,
+                                Name:           o.name,
+                                StartsAt:       o.startsAt,
+                                EndsAt:         o.endsAt,
+                                Budget:         o.budget,
+                                Description:    o.description || o.destination || "",
+                                approvalStatus: o.approvalStatus,
+                                _isOwn:         true
                             };
                         });
                     })
@@ -188,8 +190,12 @@ sap.ui.define([
         getFlightAggregate: function () {
             var that = this;
             if (!this._pFlightAgg) {
-                this._pFlightAgg = this.getFlightData().then(function (oRaw) {
-                    return Aggregate.aggregate(oRaw, null);
+                // airlines-lijst meenemen zodat de Overview ook airlines zónder vluchten toont
+                this._pFlightAgg = Promise.all([
+                    this.getFlightData(),
+                    this.getCachedList("airlines", "/Airlines")
+                ]).then(function (aResults) {
+                    return Aggregate.aggregate(aResults[0], null, aResults[1]);
                 }).catch(function (oError) {
                     that._pFlightAgg = null;
                     throw oError;
@@ -217,6 +223,28 @@ sap.ui.define([
                     });
             }
             return this._pAirportsByIata;
+        },
+
+        // PersonExtension (team/company/department/status per medewerker) → map op personUserName.
+        // Aparte CAP-entiteit, niet op /People — client-side joinen op UserName. Gememoïseerd
+        // zoals getAirportsByIata; hergebruikt getCachedList zodat de auth-header al gezet is.
+        getPersonExtensions: function () {
+            if (!this._pPersonExt) {
+                var that = this;
+                this._pPersonExt = this.getCachedList("people", "/PersonExtensions")
+                    .then(function (aExt) {
+                        var mByUser = {};
+                        aExt.forEach(function (oExt) {
+                            mByUser[oExt.personUserName] = oExt;
+                        });
+                        return mByUser;
+                    })
+                    .catch(function (oError) {
+                        that._pPersonExt = null;
+                        throw oError;
+                    });
+            }
+            return this._pPersonExt;
         },
 
         needsLogin: function () {
@@ -275,7 +303,9 @@ sap.ui.define([
                     if (!oJson) { return null; }
                     var oData = oJson.value || oJson;
                     var aRoles = oData.roles || [];
-                    oModel.setProperty("/user/id", oData.id || "");
+                    var sId = oData.id || "";
+                    oModel.setProperty("/user/id", sId);
+                    oModel.setProperty("/user/initials", sId.slice(0, 2).toUpperCase());
                     oModel.setProperty("/user/roles", aRoles);
                     oModel.setProperty("/user/isCoordinator", aRoles.indexOf("TravelCoordinator") !== -1);
                     oModel.setProperty("/user/roleLabel", that._roleLabel(aRoles));

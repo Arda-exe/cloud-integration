@@ -16,12 +16,13 @@ sap.ui.define([
         onInit: function () {
             this._oDateFormat = DateFormat.getDateInstance({ style: "medium" });
             this._aAllTrips = [];
-            this._oCreateDialog = null;
             this.getView().setModel(new JSONModel({
                 trips: [],
                 locationText: "",
                 busy: false,
                 preset: "all",
+                team: "",
+                company: "",
                 counts: { total: 0, upcoming: 0, completed: 0 }
             }), "detail");
             this.getRouter().getRoute("employee")
@@ -44,9 +45,27 @@ sap.ui.define([
             oDetail.setProperty("/trips", []);
             oDetail.setProperty("/locationText", "");
             oDetail.setProperty("/preset", "all");
+            oDetail.setProperty("/team", "");
+            oDetail.setProperty("/company", "");
             oDetail.setProperty("/counts", { total: 0, upcoming: 0, completed: 0 });
 
             this._loadTrips(sUserName);
+            this._loadExtension(sUserName);
+        },
+
+        // team/company komen uit PersonExtension (aparte CAP-entiteit) → in het detail-model
+        // zetten zodat de header ze toont. Stale-nav guard zoals _loadTrips.
+        _loadExtension: function (sUserName) {
+            var that = this;
+            this.getOwnerComponent().getPersonExtensions().then(function (mExt) {
+                if (that._sUserName !== sUserName) { return; }
+                var oExt = mExt[sUserName] || {};
+                var oDetail = that.getView().getModel("detail");
+                oDetail.setProperty("/team", oExt.team || "");
+                oDetail.setProperty("/company", oExt.company || "");
+            }).catch(function (oError) {
+                Log.error("Loading person extension failed", oError);
+            });
         },
 
         _loadTrips: function (sUserName) {
@@ -190,86 +209,6 @@ sap.ui.define([
             );
         },
 
-        onCreateTrip: function () {
-            var that = this;
-            if (this._oCreateDialog) {
-                this._resetCreateForm();
-                this._oCreateDialog.open();
-                return;
-            }
-            this.loadFragment({ name: "primepath.dashboard.view.CreateTripDialog" })
-                .then(function (oDialog) {
-                    that._oCreateDialog = oDialog;
-                    oDialog.open();
-                });
-        },
-
-        _resetCreateForm: function () {
-            this.byId("tripName").setValue("");
-            this.byId("tripDestination").setValue("");
-            this.byId("tripStartsAt").setDateValue(null);
-            this.byId("tripEndsAt").setDateValue(null);
-            this.byId("tripBudget").setValue("");
-            this.byId("tripDescription").setValue("");
-        },
-
-        onSaveTrip: function () {
-            var that = this;
-            var sName        = this.byId("tripName").getValue().trim();
-            var sDestination = this.byId("tripDestination").getValue().trim();
-            var oStartsAt    = this.byId("tripStartsAt").getDateValue();
-            var oEndsAt      = this.byId("tripEndsAt").getDateValue();
-            var sBudget      = this.byId("tripBudget").getValue();
-            var sDescription = this.byId("tripDescription").getValue().trim();
-
-            if (!sName || !oStartsAt || !oEndsAt) {
-                MessageToast.show("Vul naam, startdatum en einddatum in.");
-                return;
-            }
-            if (oEndsAt < oStartsAt) {
-                MessageToast.show("Einddatum moet na startdatum liggen.");
-                return;
-            }
-
-            var oComp = this.getOwnerComponent();
-            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
-            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
-
-            var oBody = {
-                personUserName: this._sUserName,
-                name:           sName,
-                destination:    sDestination,
-                startsAt:       oStartsAt.toISOString(),
-                endsAt:         oEndsAt.toISOString(),
-                budget:         sBudget ? parseFloat(sBudget) : null,
-                description:    sDescription
-            };
-
-            fetch("/trips/OwnTrips", {
-                method: "POST",
-                headers: mHeaders,
-                body: JSON.stringify(oBody)
-            })
-            .then(function (r) {
-                if (!r.ok) { throw new Error("HTTP " + r.status); }
-                return r.json();
-            })
-            .then(function () {
-                that._oCreateDialog.close();
-                MessageToast.show("Trip \"" + sName + "\" aangemaakt!");
-                delete oComp._mTripsCache[that._sUserName];
-                that._loadTrips(that._sUserName);
-            })
-            .catch(function (oError) {
-                Log.error("Create trip failed", oError);
-                MessageToast.show("Aanmaken mislukt. Probeer opnieuw.");
-            });
-        },
-
-        onCancelTrip: function () {
-            this._oCreateDialog.close();
-        },
-
         onNavBack: function () {
             this.getRouter().navTo("employees");
         },
@@ -278,10 +217,6 @@ sap.ui.define([
             if (this._oLocationPopover) {
                 this._oLocationPopover.destroy();
                 this._oLocationPopover = null;
-            }
-            if (this._oCreateDialog) {
-                this._oCreateDialog.destroy();
-                this._oCreateDialog = null;
             }
         },
 

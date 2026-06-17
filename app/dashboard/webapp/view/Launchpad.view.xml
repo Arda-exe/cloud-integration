@@ -12,7 +12,7 @@
         <content>
             <VBox alignItems="Center" class="sapUiLargeMarginTop sapUiLargeMarginBottom">
                 <FlexBox wrap="Wrap" justifyContent="Center" alignItems="Center">
-                    <GenericTile class="sapUiSmallMargin" frameType="OneByOne"
+                    <GenericTile class="sapUiSmallMargin" frameType="TwoByOne"
                         header="{i18n>roleTravelCoordinatorTitle}"
                         subheader="{i18n>roleTravelCoordinatorDesc}"
                         app:role="TravelCoordinator"
@@ -21,7 +21,7 @@
                             <ImageContent src="sap-icon://approvals" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiSmallMargin" frameType="OneByOne"
+                    <GenericTile class="sapUiSmallMargin" frameType="TwoByOne"
                         header="{i18n>roleTeamLeadTitle}"
                         subheader="{i18n>roleTeamLeadDesc}"
                         app:role="TeamLead"
@@ -30,7 +30,7 @@
                             <ImageContent src="sap-icon://manager" />
                         </TileContent>
                     </GenericTile>
-                    <GenericTile class="sapUiSmallMargin" frameType="OneByOne"
+                    <GenericTile class="sapUiSmallMargin" frameType="TwoByOne"
                         header="{i18n>roleHRTitle}"
                         subheader="{i18n>roleHRDesc}"
                         app:role="HR"

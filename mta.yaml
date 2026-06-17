@@ -81,4 +81,4 @@ resources:
                 URL: https://services.odata.org/V4/TripPinService
                 Type: HTTP
                 ProxyType: Internet
-                Authentication: NoAuthentication
+                Authentication: NoAuthentication 

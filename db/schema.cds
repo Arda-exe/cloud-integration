@@ -25,6 +25,21 @@ entity OwnTrip {
     company           : String(100);
     team              : String(100);
 }
+
+entity OwnFlight {
+    key flightId     : UUID;
+    tripId           : UUID;
+    flightNumber     : String(20);
+    airlineName      : String(100);
+    seatNumber       : String(10);
+    startsAt         : DateTime;
+    endsAt           : DateTime;
+    fromIata         : String(10);
+    fromName         : String(100);
+    toIata           : String(10);
+    toName           : String(100);
+}
+
 entity PersonExtension {
     key personUserName : String(100);
     department         : String(100);

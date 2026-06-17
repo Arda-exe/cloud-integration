@@ -11,6 +11,7 @@
         <!-- switch-role = nav-back knop (alleen binnen de app via showNavButton) → launchpad.
              showNavButton/navButtonPressed zijn kern-ShellBar-API (altijd geldig). -->
         <f:ShellBar
+            id="shellBar"
             title="{i18n>shellTitle}"
             secondaryTitle="{app>/user/roleLabel}"
             showNavButton="{app>/showChrome}"

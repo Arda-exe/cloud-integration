@@ -3,8 +3,9 @@ sap.ui.define([
     "sap/ui/model/json/JSONModel",
     "sap/base/Log",
     "primepath/dashboard/util/formatters",
-    "primepath/dashboard/util/searchFilter"
-], function (BaseController, JSONModel, Log, formatters, searchFilter) {
+    "primepath/dashboard/util/searchFilter",
+    "primepath/dashboard/util/approval"
+], function (BaseController, JSONModel, Log, formatters, searchFilter, approval) {
     "use strict";
 
     // afgeleide reisstatus → kleur (sap.ui.core.ValueState) + i18n-sleutel
@@ -23,6 +24,13 @@ sap.ui.define([
                 people: [], count: 0, busy: true,
                 teamOptions: [], companyOptions: []
             }), "view");
+            // bij elke navigatie naar deze tab herladen, zodat een nieuw aangemaakte trip de
+            // afgeleide status (upcoming/traveling) meteen bijwerkt (cache is al geëvict bij create)
+            this.getRouter().getRoute("employees")
+                .attachPatternMatched(this.onPatternMatched, this);
+        },
+
+        onPatternMatched: function () {
             this._loadPeople();
         },
 
@@ -32,13 +40,19 @@ sap.ui.define([
             var oBundle = this.getResourceBundle();
             var oComp = this.getOwnerComponent();
             // getTripData levert personen MET hun trips (gedeelde cache, zelfde burst als Overview);
-            // getPersonExtensions levert team/company per medewerker (aparte CAP-entiteit)
-            Promise.all([oComp.getTripData(), oComp.getPersonExtensions()]).then(function (aResults) {
+            // getPersonExtensions levert team/company per medewerker (aparte CAP-entiteit);
+            // getTripExtensions levert de goedkeurings-map → enkel goedgekeurde trips bepalen status
+            Promise.all([
+                oComp.getTripData(),
+                oComp.getPersonExtensions(),
+                oComp.getTripExtensions()
+            ]).then(function (aResults) {
                 var aPerPerson = aResults[0];
                 var mExt = aResults[1] || {};
+                var mTripExt = aResults[2] || {};
                 // augmented KOPIEËN — nooit de gedeelde cache-objecten muteren
                 that._aAllPeople = aPerPerson.map(function (oEntry) {
-                    var sStatus = that._computeStatus(oEntry.trips);
+                    var sStatus = that._computeStatus(oEntry.person.UserName, oEntry.trips, mTripExt);
                     var oExt = mExt[oEntry.person.UserName] || {};
                     return Object.assign({}, oEntry.person, {
                         status: sStatus,
@@ -85,12 +99,14 @@ sap.ui.define([
             oVM.setProperty("/companyOptions", fnOptions("company"));
         },
 
-        // reisstatus t.o.v. vandaag: onderweg (trip loopt nu) > gepland (toekomstige trip) > beschikbaar
-        _computeStatus: function (aTrips) {
+        // reisstatus t.o.v. vandaag: onderweg (trip loopt nu) > gepland (toekomstige trip) > beschikbaar.
+        // Enkel GOEDGEKEURDE trips tellen mee — een afgekeurde/pending trip maakt niemand "onderweg".
+        _computeStatus: function (sUserName, aTrips, mExt) {
             var iNow = Date.now();
             var bTraveling = false;
             var bUpcoming = false;
             (aTrips || []).forEach(function (oTrip) {
+                if (!approval.isApproved(approval.statusKey(oTrip, sUserName, mExt))) { return; }
                 var iStart = new Date(oTrip.StartsAt).getTime();
                 var iEnd = new Date(oTrip.EndsAt).getTime();
                 if (iStart <= iNow && iEnd >= iNow) {

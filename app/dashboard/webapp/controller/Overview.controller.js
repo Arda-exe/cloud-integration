@@ -16,12 +16,15 @@ sap.ui.define([
                 busy: true,
                 flightsBusy: true,
                 preset: "all",   // actieve snelkeuze ("" = handmatig bereik)
+                travellersRankBy: "trips",   // top reizigers op trip-aantal of op budget
                 kpi: { employees: "", trips: "", budget: "", budgetScale: "", airports: "", airlines: "" },
                 topTravellers: [],
                 topAirlines: [],
                 topRoutes: []
             }), "view");
-            this._aAirlines = [];   // volledige airline-lijst → ook airlines met 0 vluchten tonen
+            this._aAirlines = [];      // volledige airline-lijst → ook airlines met 0 vluchten tonen
+            this._aTravellers = [];    // volledige reizigerslijst (count + budget) voor de toggle
+            this._mExt = {};           // live goedkeurings-map → enkel goedgekeurde trips tellen
             this._loadKpis();
         },
 
@@ -36,14 +39,16 @@ sap.ui.define([
                 oComponent.getCachedList("people", "/People"),
                 oComponent.getCachedList("airports", "/Airports"),
                 oComponent.getCachedList("airlines", "/Airlines"),
-                oComponent.getTripData()
+                oComponent.getTripData(),
+                oComponent.getTripExtensions()
             ]).then(function (aResults) {
                 oVM.setProperty("/kpi/employees", String(aResults[0].length));
                 oVM.setProperty("/kpi/airports", String(aResults[1].length));
                 oVM.setProperty("/kpi/airlines", String(aResults[2].length));
                 that._aAirlines = aResults[2];
+                that._mExt = aResults[4] || {};
 
-                that._applyTripMetrics(Aggregate.aggregateTrips(aResults[3], null));
+                that._applyTripMetrics(Aggregate.aggregateTrips(aResults[3], null, that._mExt));
                 oVM.setProperty("/busy", false);
 
                 that._loadFlightAggregates();
@@ -96,7 +101,7 @@ sap.ui.define([
             var oVM = this.getView().getModel("view");
             oVM.setProperty("/flightsBusy", true);
             this.getOwnerComponent().getFlightData().then(function (oRaw) {
-                var oAgg = Aggregate.aggregate(oRaw, oRange, that._aAirlines);
+                var oAgg = Aggregate.aggregate(oRaw, oRange, that._aAirlines, that._mExt);
                 that._applyTripMetrics({
                     trips: oAgg.kpis.trips,
                     budget: oAgg.kpis.budget,
@@ -125,9 +130,35 @@ sap.ui.define([
             oVM.setProperty("/kpi/budget", aParts[1] || "");
             oVM.setProperty("/kpi/budgetScale", aParts[2] || "");
 
-            oVM.setProperty("/topTravellers", oTrip.topTravellers.map(function (o) {
-                return { name: o.name, tripsLabel: oBundle.getText("topTravellersTrips", [o.count]) };
+            this._aTravellers = oTrip.topTravellers;   // volledige lijst met count + budget
+            this._renderTravellers();
+        },
+
+        // sorteert ALLE reizigers op de gekozen maatstaf (trips of budget) en bouwt het juiste
+        // label. Geen Top-N-cap meer → de volledige lijst is scrollbaar, net als de andere
+        // kaarten. Wordt herbruikt door de toggle (geen netwerk/herberekening).
+        _renderTravellers: function () {
+            var oVM = this.getView().getModel("view");
+            var oBundle = this.getResourceBundle();
+            var sBy = oVM.getProperty("/travellersRankBy");
+            var oNum = NumberFormat.getFloatInstance({ maxFractionDigits: 0 });
+            var aTop = this._aTravellers.slice().sort(function (a, b) {
+                return sBy === "budget" ? (b.budget - a.budget) : (b.count - a.count);
+            });
+            oVM.setProperty("/topTravellers", aTop.map(function (o) {
+                return {
+                    name: o.name,
+                    valueLabel: sBy === "budget"
+                        ? oBundle.getText("topTravellersBudget", [oNum.format(o.budget)])
+                        : oBundle.getText("topTravellersTrips", [o.count])
+                };
             }));
+        },
+
+        onTravellersRankChange: function (oEvent) {
+            this.getView().getModel("view").setProperty(
+                "/travellersRankBy", oEvent.getParameter("item").getKey());
+            this._renderTravellers();
         },
 
         _applyFlightMetrics: function (oAgg) {

@@ -23,6 +23,23 @@ sap.ui.define([
             var oComponent = this.getOwnerComponent();
             // tab-balk + switch-role verschijnen pas binnen de app, niet op de launchpad
             oComponent.getModel("app").setProperty("/showChrome", !bLaunchpad);
+
+            // global search verbergen op de launchpad. sap.f.SearchManager is een Element
+            // (geen visible-property), dus we halen de aggregatie weg en zetten ze terug
+            // bij het betreden van de app (zonder ze te vernietigen).
+            var oShellBar = this.byId("shellBar");
+            if (oShellBar) {
+                if (bLaunchpad) {
+                    if (oShellBar.getSearchManager()) {
+                        this._oSearchManager = oShellBar.getSearchManager();
+                        oShellBar.setSearchManager(null);
+                    }
+                } else if (this._oSearchManager) {
+                    oShellBar.setSearchManager(this._oSearchManager);
+                    this._oSearchManager = null;
+                }
+            }
+
             if (bLaunchpad) {
                 return;   // launchpad heeft geen tab → niets selecteren
             }

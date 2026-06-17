@@ -70,7 +70,8 @@
                             </VBox>
 
                             <VBox items="{view>members}">
-                                <HBox alignItems="Center" wrap="Wrap" class="sapUiTinyMarginBottom">
+                                <HBox alignItems="Center" wrap="Wrap"
+                                    class="{= ${view>statusKey} === 'rejected' ? 'ppRejected sapUiTinyMarginBottom' : 'sapUiTinyMarginBottom' }">
                                     <Text text="{view>fullName}" width="11rem" class="sapUiTinyMarginEnd" />
                                     <ObjectNumber number="{view>budget}" unit="USD" class="sapUiSmallMarginEnd" />
                                     <ObjectStatus text="{view>statusText}" state="{view>statusState}" class="sapUiSmallMarginEnd" />

@@ -1,0 +1,6 @@
+/* Afgekeurde trips/reizigers worden zichtbaar gehouden maar gedimd (zie All Trips,
+   Trip detail en de "Rejected trips"-sectie op Employee detail). Tellingen sluiten ze al
+   uit; deze klasse is enkel de visuele indicatie. */
+.ppRejected {
+    opacity: 0.55;
+}

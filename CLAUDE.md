@@ -144,8 +144,11 @@ concurrent first-callers share one request; **rejected promises are evicted** so
 
 **Cache-safety rule (the #1 regression risk):** cached arrays/objects are shared. **Never mutate
 them** — always `.slice()` before `.sort()`, and build augmented copies (`Object.assign({}, x,
-{…})`) before adding fields. `TripExtensions` is **not** cached (it's writable) — TripDetail reads
-it live so approve/reject/submit reflect immediately.
+{…})`) before adding fields. `TripExtensions` (approval status) is memoised by
+`Component.getTripExtensions()` (the `personUserName|tripId → status` map used for approved-only
+counting), but **evicted on every approval mutation** (`_pTripExt`/`_pFlightAgg` are cleared in
+the AllTrips approve/reject/submit/own-trip handlers) so approve/reject/submit reflect
+immediately. Own-trip `approvalStatus` lives in the trip cache itself, not in this map.
 
 ### Aggregation (`util/Aggregate.js`, pure / model-free)
 - `aggregateTrips(perPerson, range?)` → `{ trips, budget, topTravellers }`.

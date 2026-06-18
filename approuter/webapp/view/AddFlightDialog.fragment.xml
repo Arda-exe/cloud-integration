@@ -1,0 +1,50 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:f="sap.ui.layout.form">
+
+    <!-- Sub-dialog van CreateTripDialog: voert één vlucht in. Bij bevestigen wordt een vers
+         object op view>/newFlights gezet (geen directe POST). De luchthaven-/airline-lijsten
+         komen uit de gecachte OData-sets (view>/airports, view>/airlines). Eigen fl*-id-prefix
+         zodat er geen botsing is met de trip-velden in de create-dialog. -->
+    <Dialog id="addFlightDialog" title="{i18n>dlgAddFlightTitle}" contentWidth="36rem">
+        <content>
+            <f:SimpleForm editable="true" layout="ResponsiveGridLayout"
+                labelSpanL="4" labelSpanM="4" emptySpanL="0" emptySpanM="0"
+                columnsL="1" columnsM="1">
+                <f:content>
+                    <Label text="{i18n>colFrom} *" />
+                    <ComboBox id="flFrom" items="{view>/airports}" placeholder="{i18n>colFrom}">
+                        <core:Item key="{view>IataCode}" text="{view>label}" />
+                    </ComboBox>
+
+                    <Label text="{i18n>colTo} *" />
+                    <ComboBox id="flTo" items="{view>/airports}" placeholder="{i18n>colTo}">
+                        <core:Item key="{view>IataCode}" text="{view>label}" />
+                    </ComboBox>
+
+                    <Label text="{i18n>lblAirline} *" />
+                    <ComboBox id="flAirline" items="{view>/airlines}" placeholder="{i18n>lblAirline}">
+                        <core:Item key="{view>AirlineCode}" text="{view>Name}" />
+                    </ComboBox>
+
+                    <Label text="{i18n>lblFlightNumber}" />
+                    <Input id="flNumber" placeholder="bv. SN2587" />
+
+                    <Label text="{i18n>colSeat}" />
+                    <Input id="flSeat" placeholder="bv. 14C" />
+
+                    <Label text="{i18n>colDeparture} *" />
+                    <DateTimePicker id="flDep" displayFormat="dd MMM yyyy HH:mm" />
+
+                    <Label text="{i18n>colArrival} *" />
+                    <DateTimePicker id="flArr" displayFormat="dd MMM yyyy HH:mm" />
+                </f:content>
+            </f:SimpleForm>
+        </content>
+        <buttons>
+            <Button text="{i18n>btnAddFlight}" type="Emphasized" press=".onConfirmFlight" />
+            <Button text="Annuleren" press=".onCancelFlight" />
+        </buttons>
+    </Dialog>
+</core:FragmentDefinition>

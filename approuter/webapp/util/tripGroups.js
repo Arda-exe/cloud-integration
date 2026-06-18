@@ -1,4 +1,6 @@
-sap.ui.define([], function () {
+sap.ui.define([
+    "primepath/dashboard/util/approval"
+], function (approval) {
     "use strict";
 
     // Zuivere groepering van trip-KOPIEËN tot één "echte" trip. Een gedeelde TripPin-trip
@@ -34,10 +36,8 @@ sap.ui.define([], function () {
             var sFull = fullName(oPerson);
             (oEntry.trips || []).forEach(function (oTrip) {
                 var bOwn = !!oTrip._isOwn;
-                // eigen trip draagt approvalStatus zelf; TripPin-trip via de live ext-map
-                var sStatusKey = bOwn
-                    ? (oTrip.approvalStatus || "pending")
-                    : (mExt[oPerson.UserName + "|" + oTrip.TripId] || "notsubmitted");
+                // gedeelde afleiding (eigen trip → approvalStatus; TripPin-trip → live ext-map)
+                var sStatusKey = approval.statusKey(oTrip, oPerson.UserName, mExt);
 
                 var oMember = {
                     userName:  oPerson.UserName,
@@ -69,7 +69,10 @@ sap.ui.define([], function () {
                     aOrder.push(oGroup);
                 }
                 oGroup.members.push(oMember);
-                oGroup.totalBudget += (oTrip.Budget || 0);
+                // totaal telt enkel goedgekeurd + in behandeling (afgekeurd/niet-ingediend niet)
+                if (approval.countsInBudget(sStatusKey)) {
+                    oGroup.totalBudget += (oTrip.Budget || 0);
+                }
             });
         });
 

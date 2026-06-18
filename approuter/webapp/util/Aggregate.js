@@ -1,6 +1,7 @@
 sap.ui.define([
-    "primepath/dashboard/util/constants"
-], function (constants) {
+    "primepath/dashboard/util/constants",
+    "primepath/dashboard/util/approval"
+], function (constants, approval) {
     "use strict";
 
     // Zuivere, model-vrije aggregatie over de ruwe trip/vlucht-data. Geen UI5-afhankelijkheid
@@ -75,14 +76,18 @@ sap.ui.define([
         });
     }
 
-    // trip-gecentreerde metrics: aantal trips, totaal budget, top reizigers (op trip-aantal)
-    function aggregateTrips(aPerPerson, oRange) {
+    // trip-gecentreerde metrics: aantal trips, totaal budget, top reizigers (op trip-aantal).
+    // mExt (live /TripExtensions-map) → enkel GOEDGEKEURDE trips tellen mee.
+    function aggregateTrips(aPerPerson, oRange, mExt) {
+        mExt = mExt || {};
         var iTrips = 0;
         var fBudget = 0;
         var aTravellers = [];
         (aPerPerson || []).forEach(function (oEntry) {
+            var sUser = oEntry.person.UserName;
             var aTrips = oEntry.trips.filter(function (oTrip) {
-                return tripInRange(oTrip, oRange);
+                return tripInRange(oTrip, oRange)
+                    && approval.isApproved(approval.statusKey(oTrip, sUser, mExt));
             });
             iTrips += aTrips.length;
             fBudget += aTrips.reduce(function (f, oTrip) {
@@ -91,15 +96,21 @@ sap.ui.define([
             if (aTrips.length) {
                 aTravellers.push({
                     name: (oEntry.person.FirstName || "") + " " + (oEntry.person.LastName || ""),
-                    count: aTrips.length
+                    count: aTrips.length,
+                    budget: aTrips.reduce(function (f, oTrip) {
+                        return f + (oTrip.Budget || 0);
+                    }, 0)
                 });
             }
         });
         aTravellers.sort(function (a, b) { return b.count - a.count; });
+        // volledige lijst (met count + budget) → de Overview-controller sorteert op de
+        // gekozen maatstaf en neemt dan pas de Top-N (anders zou "op budget" enkel de
+        // trip-count-Top-N herschikken)
         return {
             trips: iTrips,
             budget: fBudget,
-            topTravellers: aTravellers.slice(0, constants.TOP_N)
+            topTravellers: aTravellers
         };
     }
 
@@ -107,8 +118,9 @@ sap.ui.define([
     // oRaw = { perPerson: [{person, trips}], pairs: [{user, tripId, tripName, flights:[]}] }
     // aAllAirlines (optioneel) = de volledige /Airlines-lijst; airlines zónder vluchten
     // worden zo met count 0 meegenomen in de Overview-lijst
-    function aggregate(oRaw, oRange, aAllAirlines) {
-        var oTrip = aggregateTrips(oRaw.perPerson, oRange);
+    function aggregate(oRaw, oRange, aAllAirlines, mExt) {
+        mExt = mExt || {};
+        var oTrip = aggregateTrips(oRaw.perPerson, oRange, mExt);
         var mAir = {};
         var mRoute = {};
         var mAirport = {};
@@ -127,14 +139,25 @@ sap.ui.define([
         // ook kopieën zonder vluchten), niet enkel wie via deze luchthaven vloog
         var mShareMembers = {};
         (oRaw.perPerson || []).forEach(function (oEntry) {
+            var sUser = oEntry.person.UserName;
             oEntry.trips.forEach(function (oT) {
-                if (oT.ShareId) {
-                    (mShareMembers[oT.ShareId] || (mShareMembers[oT.ShareId] = {}))[oEntry.person.UserName] = true;
+                // enkel goedgekeurde kopieën tellen mee in de reizigers-teller per luchthaven
+                if (oT.ShareId && approval.isApproved(approval.statusKey(oT, sUser, mExt))) {
+                    (mShareMembers[oT.ShareId] || (mShareMembers[oT.ShareId] = {}))[sUser] = true;
                 }
             });
         });
 
         (oRaw.pairs || []).forEach(function (oPair) {
+            // gate de hele kopie op goedkeuring → enkel vluchten van goedgekeurde trips tellen
+            // mee in top airlines/routes/byAirport (eigen trips dragen approvalStatus zelf;
+            // TripPin-trips via de live ext-map)
+            var sPairStatus = oPair.isOwn
+                ? (oPair.approvalStatus || "pending")
+                : (mExt[oPair.user + "|" + oPair.tripId] || "notsubmitted");
+            if (!approval.isApproved(sPairStatus)) {
+                return;
+            }
             (oPair.flights || []).forEach(function (oFlight) {
                 if (!flightInRange(oFlight, oRange)) {
                     return;

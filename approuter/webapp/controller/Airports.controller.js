@@ -269,6 +269,23 @@ sap.ui.define([
             if (oNav) {
                 oNav.back();
             }
+            this._resetMapView();
+        },
+
+        // terug naar de volledige kaart (alle pins) + open popups sluiten
+        _resetMapView: function () {
+            if (!this._oMap) {
+                return;
+            }
+            this._oMap.closePopup();
+            var aBounds = Object.keys(this._mMarkers).map(function (sIcao) {
+                return this._mMarkers[sIcao].latlng;
+            }, this);
+            if (aBounds.length) {
+                this._oMap.fitBounds(aBounds, { padding: [30, 30] });
+            } else {
+                this._oMap.setView(constants.MAP_VIEW, constants.MAP_ZOOM);
+            }
         },
 
         onSelectedTripPress: function (oEvent) {

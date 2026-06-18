@@ -25,13 +25,36 @@ sap.ui.define([
             this._aAirlines = [];      // volledige airline-lijst → ook airlines met 0 vluchten tonen
             this._aTravellers = [];    // volledige reizigerslijst (count + budget) voor de toggle
             this._mExt = {};           // live goedkeurings-map → enkel goedgekeurde trips tellen
+
+            // bij elke navigatie naar de Overview-tab herladen, zodat een net goedgekeurde trip
+            // meteen in de KPI's/charts verschijnt (de cache is al geëvict bij approve/create in
+            // All Trips; getTripExtensions/getFlightAggregate halen dan vers op).
+            this.getRouter().getRoute("overview").attachPatternMatched(this.onPatternMatched, this);
+        },
+
+        // dunne wrapper: _loadKpis blijft arg-vrij oproepbaar (krijgt zo niet het event-object)
+        onPatternMatched: function () {
             this._loadKpis();
+        },
+
+        // bepaalt het actieve periodebereik uit de DateRangeSelection; null = all-time. Enkel
+        // wanneer BEIDE grenzen gezet zijn (anders zou Aggregate.rangeBounds .getTime() op
+        // undefined aanroepen).
+        _currentRange: function () {
+            var oPicker = this.byId("overviewPeriod");
+            var oFrom = oPicker.getDateValue();
+            var oTo = oPicker.getSecondDateValue();
+            return (oFrom && oTo) ? { from: oFrom, to: oTo } : null;
         },
 
         _loadKpis: function () {
             var that = this;
             var oComponent = this.getOwnerComponent();
             var oVM = this.getView().getModel("view");
+
+            // bij een herlaad na eviction tonen we de busy-indicator i.p.v. verouderde tegels
+            oVM.setProperty("/busy", true);
+            oVM.setProperty("/flightsBusy", true);
 
             // fase 1: entiteit-counts + trip-gebaseerde KPI's (trips, budget, top travellers).
             // De vlucht-burst (fase 2) komt erna zodat de tegels meteen renderen.
@@ -51,7 +74,15 @@ sap.ui.define([
                 that._applyTripMetrics(Aggregate.aggregateTrips(aResults[3], null, that._mExt));
                 oVM.setProperty("/busy", false);
 
-                that._loadFlightAggregates();
+                // actief periodebereik behouden over een navigatie heen: bij een gezet bereik
+                // de trip-/vluchtmetrics voor die periode herberekenen (gebruikt het net
+                // geladen _mExt/_aAirlines), anders de all-time fast-path.
+                var oRange = that._currentRange();
+                if (oRange) {
+                    that._applyPeriod(oRange);
+                } else {
+                    that._loadFlightAggregates();
+                }
             }).catch(function (oError) {
                 Log.error("Loading overview KPIs failed", oError);
                 oVM.setProperty("/busy", false);

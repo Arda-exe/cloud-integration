@@ -1,11 +1,32 @@
 {
     "welcomeFile": "/dashboard/webapp/index.html",
     "authenticationMethod": "route",
+    "logout": {
+        "logoutEndpoint": "/logout",
+        "logoutPage": "/dashboard/webapp/index.html"
+    },
     "routes": [
         {
-            "source": "^(.*)$",
+            "source": "^/secure/(.*)$",
+            "target": "/dashboard/webapp/$1",
             "destination": "srv-api",
             "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^/(user|people|trips|airlines|airports)(/.*)?$",
+            "destination": "srv-api",
+            "authenticationType": "xsuaa"
+        },
+        {
+            "source": "^/dashboard/webapp/(.*)$",
+            "destination": "srv-api",
+            "authenticationType": "none"
+        },
+        {
+            "source": "^/$",
+            "target": "/dashboard/webapp/index.html",
+            "destination": "srv-api",
+            "authenticationType": "none"
         }
     ]
 }

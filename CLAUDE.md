@@ -134,13 +134,26 @@ concurrent first-callers share one request; **rejected promises are evicted** so
   (`/people/PersonExtensions`), memoised. Joined client-side on `UserName` for team/company.
 - `_loadCurrentUser()` — `GET /user/whoami()` → the `app` JSON model
   `{ showChrome, user: { id, roles, isCoordinator, roleLabel } }`. Sends the `Authorization`
-  header set by `loginAs` (local); on BTP relies on the forwarded XSUAA session.
-- `loginAs(role)` — **real per-role login** (see "Launchpad"). Local (`window.location.hostname`
-  is localhost): injects `Authorization: Basic <coordinator|teamlead|hr>:test` into the 4 OData
-  models via `ODataModel.changeHttpHeaders(...)`, sets the role context, navigates to the role's
-  landing tab. BTP: the launchpad is bypassed in `init` (`_routeToRoleLanding` routes by the real
-  whoami role); no credentials are ever injected. Role maps live at the top of `Component.js`
-  (`ROLES`, `ROLE_LANDING`, `ROLE_USER`).
+  header set by `_applyLocalAuth` (local); on BTP relies on the forwarded XSUAA session. **Not
+  called on the BTP public launchpad** — that route is unauthenticated, so a `whoami` XHR would be
+  302'd to login.
+- `_applyLocalAuth(role)` — local mock-auth only: injects `Authorization: Basic
+  <coordinator|teamlead|hr>:test` into the 4 OData models via `ODataModel.changeHttpHeaders(...)`
+  and sets the role context. Shared by `loginAs` (tile click) and `init` (restore after refresh).
+- `loginAs(role)` — **real per-role login** (see "Launchpad"). Local: `_applyLocalAuth(role)` +
+  remembers the role in `sessionStorage` `primepath.role`, then navigates to the landing tab. BTP
+  public launchpad: stores the landing tab in `sessionStorage` `primepath.landing`, then a
+  full-page `window.location.assign("/secure/index.html")` so the approuter forces the XSUAA login
+  (a `#hash` would not survive the redirect — hence `sessionStorage`).
+- `logout()` (the "Switch role" action) — local: clears `primepath.role` + the auth/user context →
+  back to the launchpad; BTP: `window.location.assign("/logout")` (approuter logout → public
+  launchpad).
+- `init` has **three boot modes** and reads `window.location.hash` **before** `router.initialize()`
+  so a **refresh keeps the current page** (it only auto-routes to a landing when there is no
+  deep-link): **local** (`localhost`) restores any saved `primepath.role` then shows the launchpad
+  picker; **BTP secure** (path under `/secure/`) behaves as logged-in and routes by the saved
+  landing or the real whoami role; **BTP public** (`/dashboard/webapp/`) shows only the launchpad,
+  no whoami. Role maps live at the top of `Component.js` (`ROLES`, `ROLE_LANDING`, `ROLE_USER`).
 
 **Cache-safety rule (the #1 regression risk):** cached arrays/objects are shared. **Never mutate
 them** — always `.slice()` before `.sort()`, and build augmented copies (`Object.assign({}, x,
@@ -194,10 +207,14 @@ screen (`""`). Three `GenericTile` panels (TravelCoordinator · TeamLead · HR; 
 `app:` customData). Clicking a panel performs a **real per-role login** and routes to that role's
 landing tab: **Coordinator & TeamLead → Employees, HR → Overview**. Locally (`cds watch`, mocked
 Basic auth) it injects the matching mock-user credentials so the backend genuinely enforces the
-role (only Coordinator can approve/reject). The tab bar + Switch-role button are hidden here
-(`app>/showChrome`); the ShellBar's **Switch role** action returns to the launchpad. On BTP the
-launchpad is bypassed (role comes from the XSUAA user). No backend change — see the auth notes in
-"Models & app-wide cache".
+role (only Coordinator can approve/reject), and the chosen role is kept in `sessionStorage` so a
+**refresh stays on the current page** instead of bouncing back here. The tab bar + Switch-role
+button are hidden here (`app>/showChrome`); the ShellBar's **Switch role** action calls
+`Component.logout()`. On BTP the launchpad is served **publicly** (no login yet); clicking a tile
+does a full-page jump to the xsuaa-protected `/secure/` route, which makes the approuter present
+the **real XSUAA login**, after which the app opens under `/secure/` with the role/permissions from
+the XSUAA user (the tile only picks the landing tab, carried via `sessionStorage`). The approuter
+wiring lives in `approuter/xs-app.json` — see "Backend services".
 
 **Overview** (`Overview.view/controller`) — landing page.
 - Period `DateRangeSelection` + quick-preset buttons (All time · Last month · Last 3 months ·
@@ -298,6 +315,14 @@ services (people/airports/airlines/trips) forward to TripPin, plus:
   (`fromIata/Name/City`, `toIata/Name/City`, airline, times, seat).
 - `srv/people-service.js` — the `/People` READ dedupes by `UserName` and drops `Jdbc*` junk so
   TripPin's duplicate keys don't crash the UI5 V4 model (see the next section).
+- `approuter/xs-app.json` — the BTP entry point that wires the login flow: serves the
+  launchpad/static app **publicly** (`/dashboard/webapp/**` + `/`, auth `none`) and an
+  xsuaa-protected **`/secure/**` mirror** (rewrites `/secure/X` → `/dashboard/webapp/X`) plus the
+  protected data routes (`/user`, `/people`, `/trips`, `/airlines`, `/airports`). Hitting `/secure/`
+  with no session makes the approuter force the XSUAA login (a full-page nav, so the redirect
+  works); a `logout` endpoint drops the session back to the public launchpad. The UI5 files
+  themselves are served by CAP (`server.js`, Express static at `/dashboard/webapp`), so there is a
+  single source of truth (`app/dashboard/webapp/`).
 
 ## What the frontend wants from the backend
 
@@ -333,7 +358,10 @@ it raises items here.
   "What the frontend wants from the backend").
 - **"Add trip"** (a coordinator creating a trip in our own DB) — not built; needs a backend store
   (same section).
-- BTP serving of the UI (approuter html5/static module) — backend/deploy team's concern.
+- BTP UI serving / login flow — **now wired**: CAP serves the UI5 app (`server.js` Express static)
+  fronted by the approuter (public launchpad → `/secure/` XSUAA login → app). See
+  `approuter/xs-app.json` + "Launchpad / role login". (Originally a deferred html5/static-module
+  idea — not used.)
 
 ## Working style
 

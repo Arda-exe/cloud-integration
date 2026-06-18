@@ -5,8 +5,9 @@ sap.ui.define([
     "sap/m/MessageToast",
     "sap/base/Log",
     "primepath/dashboard/util/formatters",
-    "primepath/dashboard/util/tripGroups"
-], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, tripGroups) {
+    "primepath/dashboard/util/tripGroups",
+    "primepath/dashboard/util/approval"
+], function (BaseController, JSONModel, DateFormat, MessageToast, Log, formatters, tripGroups, approval) {
     "use strict";
 
     var STATUS_STATE = {
@@ -67,50 +68,76 @@ sap.ui.define([
 
         _loadOwnTrip: function () {
             var that = this;
+            var iSeq = ++this._iLoadSeq;
+            var sUserName = this._sUserName;
+            var sTripIdRaw = this._sTripIdRaw;
             var oModel = this.getView().getModel("trip");
             var oComp = this.getOwnerComponent();
 
+            // flightsBusy:true → de routeblok-leegstaat flitst niet voordat de vluchten geladen zijn
             oModel.setData({
                 busy: true, personName: this._sUserName, periodText: "",
-                trip: {}, totalBudget: 0, members: [], flights: [], flightsBusy: false,
+                trip: {}, totalBudget: 0, members: [], flights: [], flightsBusy: true,
                 route: { has: false }
             });
 
             var mHeaders = { Accept: "application/json" };
             if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
 
-            fetch("/trips/OwnTrips(" + this._sTripIdRaw + ")", { headers: mHeaders })
-                .then(function (r) {
-                    if (!r.ok) { throw new Error("HTTP " + r.status); }
-                    return r.json();
-                })
-                .then(function (oTrip) {
-                    var sStatus = oTrip.approvalStatus || "pending";
-                    oModel.setProperty("/trip", {
-                        Name:        oTrip.name,
-                        Budget:      oTrip.budget,
-                        Description: oTrip.description || oTrip.destination || ""
-                    });
-                    oModel.setProperty("/personName", that._sUserName);
-                    oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
-                    // eigen trip = één reiziger → totaal = eigen budget
-                    oModel.setProperty("/totalBudget", oTrip.budget || 0);
-                    oModel.setProperty("/members", [{
-                        userName:    that._sUserName,
-                        name:        that._sUserName,
-                        budget:      oTrip.budget,
-                        statusText:  that._statusText(sStatus),
-                        statusState: STATUS_STATE[sStatus] || "None"
-                    }]);
-                    oModel.setProperty("/busy", false);
-                    oModel.setProperty("/flightsBusy", false);
-                })
-                .catch(function (oError) {
-                    Log.error("Loading own trip failed", oError);
-                    oModel.setProperty("/busy", false);
-                    oModel.setProperty("/flightsBusy", false);
-                    MessageToast.show(that.getResourceBundle().getText("tripLoadError"));
+            // trip + vluchten in ÉÉN Promise.all (net als de TripPin-tak): zo renderen de
+            // vluchten/route nooit op een trip waarvan de header niet laadde. getCachedFlights en
+            // getAirportsByIata vangen hun eigen fout op → alleen de OwnTrips-fetch kan rejecten.
+            Promise.all([
+                fetch("/trips/OwnTrips(" + sTripIdRaw + ")", { headers: mHeaders })
+                    .then(function (r) {
+                        if (!r.ok) { throw new Error("HTTP " + r.status); }
+                        return r.json();
+                    }),
+                oComp.getCachedFlights(sUserName, sTripIdRaw),
+                oComp.getAirportsByIata().catch(function () { return {}; })
+            ]).then(function (aResults) {
+                if (iSeq !== that._iLoadSeq) { return; }
+                var oTrip = aResults[0];
+                var aFlights = aResults[1];
+                var mByIata = aResults[2];
+
+                var sStatus = oTrip.approvalStatus || "pending";
+                oModel.setProperty("/trip", {
+                    Name:        oTrip.name,
+                    Budget:      oTrip.budget,
+                    Description: oTrip.description || oTrip.destination || ""
                 });
+                oModel.setProperty("/personName", that._sUserName);
+                oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
+                // eigen trip = één reiziger → totaal = eigen budget, maar enkel als de trip telt
+                // (goedgekeurd/in behandeling); afgekeurd → 0
+                oModel.setProperty("/totalBudget",
+                    approval.countsInBudget(sStatus) ? (oTrip.budget || 0) : 0);
+                oModel.setProperty("/members", [{
+                    userName:    that._sUserName,
+                    name:        that._sUserName,
+                    budget:      oTrip.budget,
+                    statusKey:   sStatus,
+                    statusText:  that._statusText(sStatus),
+                    statusState: STATUS_STATE[sStatus] || "None"
+                }]);
+                oModel.setProperty("/busy", false);
+
+                // vluchten identiek toegepast als bij een TripPin-trip (tabel + routeblok + tellers)
+                if (aFlights && aFlights.length) {
+                    that._applyFlights(aFlights);
+                    that._applyRoute(aFlights, mByIata);
+                } else {
+                    oModel.setProperty("/flightsBusy", false);
+                }
+            })
+            .catch(function (oError) {
+                if (iSeq !== that._iLoadSeq) { return; }
+                Log.error("Loading own trip failed", oError);
+                oModel.setProperty("/busy", false);
+                oModel.setProperty("/flightsBusy", false);
+                MessageToast.show(that.getResourceBundle().getText("tripLoadError"));
+            });
         },
 
         _loadTripPinTrip: function () {
@@ -160,7 +187,6 @@ sap.ui.define([
                 if (aOwnFlights && aOwnFlights.length) {
                     that._applyFlights(aOwnFlights);
                     that._applyRoute(aOwnFlights, mByIata);
-                    that._loadAirportTripCounts();
                 }
                 that._loadSharedTrip(oTrip, aOwnFlights, mByIata, sUserName, iTripId, iSeq);
             }).catch(function (oError) {
@@ -212,7 +238,6 @@ sap.ui.define([
             var aSorted = aFlights.slice().sort(function (a, b) {
                 return (a.StartsAt || "") < (b.StartsAt || "") ? -1 : 1;
             });
-            var sNone = this.getResourceBundle().getText("valueNone");
             var mHint = {};
             aSorted.forEach(function (f) {
                 if (f.fromIata && !mHint[f.fromIata]) { mHint[f.fromIata] = { name: f.fromName, city: f.fromCity }; }
@@ -235,7 +260,7 @@ sap.ui.define([
                 mSeen[sIata] = true;
                 var h = mHint[sIata] || {};
                 var oFacts = that._airportFacts(sIata, h.name, h.city, mByIata);
-                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city, trips: sNone });
+                aAirports.push({ iata: sIata, name: oFacts.name, city: oFacts.city });
             });
             oModel.setProperty("/route", { has: true, stops: aStops, airports: aAirports });
         },
@@ -250,21 +275,6 @@ sap.ui.define([
             return { name: sName, city: sCity };
         },
 
-        _loadAirportTripCounts: function () {
-            var oModel = this.getView().getModel("trip");
-            if (!oModel.getProperty("/route/has")) { return; }
-            this.getOwnerComponent().getFlightAggregate().then(function (oAgg) {
-                var mBy = oAgg.byAirport || {};
-                var aAirports = oModel.getProperty("/route/airports") || [];
-                aAirports.forEach(function (oA) {
-                    oA.trips = mBy[oA.iata] ? String(mBy[oA.iata].trips.length) : "0";
-                });
-                oModel.setProperty("/route/airports", aAirports);
-            }).catch(function (oError) {
-                Log.error("Loading airport trip counts failed", oError);
-            });
-        },
-
         // De pagina is identiek vanuit elke kopie: groepeer op ShareId → combineer budgetten,
         // toon elke reiziger met eigen budget + status, en leen vluchten van een kopie die ze
         // wél heeft. Gebruikt dezelfde util + LIVE TripExtensions-map als de All Trips-lijst.
@@ -272,19 +282,15 @@ sap.ui.define([
             var that = this;
             var oModel = this.getView().getModel("trip");
             var oComp = this.getOwnerComponent();
-            var oExtBinding = oComp.getModel("trips").bindList("/TripExtensions");
 
+            // zelfde gememoïseerde goedkeurings-map als de tellende views (Component.getTripExtensions)
             Promise.all([
                 oComp.getTripData(),
-                oExtBinding.requestContexts(0, 1000)
+                oComp.getTripExtensions()
             ]).then(function (aResults) {
                 if (iSeq !== that._iLoadSeq) { return; }
                 var aPerPerson = aResults[0];
-                var mExt = {};
-                aResults[1].forEach(function (oCtx) {
-                    var o = oCtx.getObject();
-                    mExt[o.personUserName + "|" + o.tripId] = o.approvalStatus;
-                });
+                var mExt = aResults[1] || {};
 
                 var aGroups = tripGroups.groupTrips(aPerPerson, mExt);
                 var oGroup = aGroups.find(function (g) {
@@ -297,6 +303,7 @@ sap.ui.define([
                         userName:    m.userName,
                         name:        m.fullName,
                         budget:      m.budget,
+                        statusKey:   m.statusKey,
                         statusText:  that._statusText(m.statusKey),
                         statusState: STATUS_STATE[m.statusKey] || "None"
                     };

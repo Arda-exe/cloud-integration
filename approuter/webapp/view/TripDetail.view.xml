@@ -60,10 +60,6 @@
                                             <Label text="{i18n>lblCity}" width="9rem" />
                                             <Text text="{trip>city}" />
                                         </HBox>
-                                        <HBox>
-                                            <Label text="{i18n>lblTripsViaAirport}" width="9rem" />
-                                            <Text text="{trip>trips}" />
-                                        </HBox>
                                     </VBox>
                                 </f:content>
                             </f:Card>
@@ -102,7 +98,7 @@
                             <Column><Text text="{i18n>colStatus}" /></Column>
                         </columns>
                         <items>
-                            <ColumnListItem>
+                            <ColumnListItem class="{= ${trip>statusKey} === 'rejected' ? 'ppRejected' : '' }">
                                 <cells>
                                     <Link text="{trip>name}" press=".onCoTravellerPress" />
                                     <ObjectNumber number="{trip>budget}" unit="USD" />

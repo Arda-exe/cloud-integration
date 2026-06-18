@@ -28,12 +28,27 @@
                     <DatePicker id="tripEndsAt" valueFormat="yyyy-MM-dd'T'HH:mm:ss'Z'" displayFormat="dd MMM yyyy" />
 
                     <Label text="Budget (USD)" />
-                    <Input id="tripBudget" type="Number" placeholder="0" />
+                    <Input id="tripBudget" type="Number" placeholder="0" liveChange=".onBudgetLiveChange" />
 
                     <Label text="Beschrijving" />
                     <TextArea id="tripDescription" rows="3" placeholder="Optionele beschrijving" growing="true" />
                 </f:content>
             </f:SimpleForm>
+
+            <!-- Vluchten-sectie: een wachtrij van toe te voegen vluchten (view>/newFlights).
+                 Elke vlucht wordt via AddFlightDialog ingevoerd; bij Opslaan worden ze na de
+                 trip-POST naar /trips/OwnFlights gestuurd. Lijst-Delete-modus verwijdert een rij. -->
+            <VBox class="sapUiSmallMarginBegin sapUiSmallMarginEnd sapUiSmallMarginBottom">
+                <Toolbar>
+                    <Title text="{i18n>dlgFlightsSection}" level="H3" />
+                    <ToolbarSpacer />
+                    <Button text="{i18n>btnAddFlight}" icon="sap-icon://add" press=".onAddFlight" />
+                </Toolbar>
+                <List items="{view>/newFlights}" mode="Delete" delete=".onRemoveQueuedFlight"
+                    noDataText="{i18n>newFlightsNoData}">
+                    <StandardListItem title="{view>summary}" description="{view>detail}" icon="sap-icon://flight" />
+                </List>
+            </VBox>
         </content>
         <buttons>
             <Button text="Opslaan" type="Emphasized" press=".onSaveTrip" />

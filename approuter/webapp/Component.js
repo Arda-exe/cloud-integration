@@ -12,6 +12,9 @@ sap.ui.define([
     var ROLE_LANDING = { TravelCoordinator: "employees", TeamLead: "employees", HR: "overview" };
     var ROLE_USER = { TravelCoordinator: "coordinator", TeamLead: "teamlead", HR: "hr" };
 
+    // eigen trips/vluchten hebben een UUID-sleutel; TripPin-trips een numerieke id
+    var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
     return UIComponent.extend("primepath.dashboard.Component", {
         metadata: {
             manifest: "json",
@@ -29,6 +32,7 @@ sap.ui.define([
             this._pFlightAgg = null;
             this._pAirportsByIata = null;
             this._pPersonExt = null;
+            this._pTripExt = null;
 
             this._bLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
             this._sAuthHeader = null;
@@ -116,26 +120,78 @@ sap.ui.define([
             return this._mTripsCache[sUserName];
         },
 
+        // Vluchten per (user, trip). Eigen trips (UUID) komen uit /trips/OwnFlights; TripPin-trips
+        // (numerieke id) uit de /PlanItems-proxy. Beide branches leveren dezelfde "ruwe" vorm op,
+        // zodat trip-detail én de aggregaten ze identiek verwerken.
         getCachedFlights: function (sUserName, iTripId) {
-            var that = this;
             var sKey = sUserName + "|" + iTripId;
             if (!this._mFlightCache[sKey]) {
-                this._mFlightCache[sKey] = this.getModel("trips")
-                    .bindList("/PlanItems", undefined, undefined, [
-                        new Filter("personUserName", FilterOperator.EQ, sUserName),
-                        new Filter("tripId", FilterOperator.EQ, iTripId)
-                    ], { $select: "PlanItemId,FlightNumber,SeatNumber,StartsAt,EndsAt," +
-                        "fromIata,fromName,fromCity,toIata,toName,toCity,airlineCode,airlineName" })
-                    .requestContexts(0, constants.PAGE_SIZE_FLIGHTS)
-                    .then(function (aContexts) {
-                        return aContexts.map(function (oCtx) { return oCtx.getObject(); });
-                    })
-                    .catch(function () {
-                        delete that._mFlightCache[sKey];
-                        return [];
-                    });
+                this._mFlightCache[sKey] = UUID_RE.test(String(iTripId))
+                    ? this._loadOwnFlights(iTripId, sKey)
+                    : this._loadTripPinFlights(sUserName, iTripId, sKey);
             }
             return this._mFlightCache[sKey];
+        },
+
+        _loadTripPinFlights: function (sUserName, iTripId, sKey) {
+            var that = this;
+            return this.getModel("trips")
+                .bindList("/PlanItems", undefined, undefined, [
+                    new Filter("personUserName", FilterOperator.EQ, sUserName),
+                    new Filter("tripId", FilterOperator.EQ, iTripId)
+                ], { $select: "PlanItemId,FlightNumber,SeatNumber,StartsAt,EndsAt," +
+                    "fromIata,fromName,fromCity,toIata,toName,toCity,airlineCode,airlineName" })
+                .requestContexts(0, constants.PAGE_SIZE_FLIGHTS)
+                .then(function (aContexts) {
+                    return aContexts.map(function (oCtx) { return oCtx.getObject(); });
+                })
+                .catch(function () {
+                    delete that._mFlightCache[sKey];
+                    return [];
+                });
+        },
+
+        // OwnFlight (UUID-trip) plat ophalen en mappen naar de /PlanItems-vorm. OwnFlight heeft
+        // geen airlineCode → afgeleid uit de /Airlines-lijst (Name → code), anders valt de vlucht
+        // weg uit "Top airlines" (dat groepeert op airlineCode). V4 GUID-literal: GEEN quotes.
+        _loadOwnFlights: function (sTripId, sKey) {
+            var that = this;
+            var mHeaders = { Accept: "application/json" };
+            if (this._sAuthHeader) { mHeaders.Authorization = this._sAuthHeader; }
+            return Promise.all([
+                fetch("/trips/OwnFlights?$filter=tripId eq " + sTripId + "&$top=" + constants.PAGE_SIZE_FLIGHTS,
+                    { headers: mHeaders })
+                    .then(function (r) { return r.ok ? r.json() : { value: [] }; }),
+                this.getCachedList("airlines", "/Airlines")
+            ]).then(function (aResults) {
+                var aFlights = aResults[0].value || [];
+                var mNameToCode = {};
+                (aResults[1] || []).forEach(function (oAir) {
+                    if (oAir.Name) { mNameToCode[oAir.Name.trim().toUpperCase()] = oAir.AirlineCode; }
+                });
+                return aFlights.map(function (o) {
+                    var sName = o.airlineName || "";
+                    return {
+                        PlanItemId:   o.flightId,
+                        FlightNumber: o.flightNumber || "",
+                        SeatNumber:   o.seatNumber || "",
+                        StartsAt:     o.startsAt,
+                        EndsAt:       o.endsAt,
+                        fromIata:     o.fromIata || "",
+                        fromName:     o.fromName || "",
+                        fromCity:     "",
+                        toIata:       o.toIata || "",
+                        toName:       o.toName || "",
+                        toCity:       "",
+                        airlineName:  sName,
+                        // echte code als de naam matcht, anders de naam zelf als synthetische code
+                        airlineCode:  mNameToCode[sName.trim().toUpperCase()] || sName
+                    };
+                });
+            }).catch(function () {
+                delete that._mFlightCache[sKey];
+                return [];
+            });
         },
 
         getTripData: function () {
@@ -162,12 +218,17 @@ sap.ui.define([
                     var aPairs = [];
                     aPerPerson.forEach(function (oEntry) {
                         oEntry.trips.forEach(function (oTrip) {
-                            if (oTrip._isOwn) { return; }
+                            // eigen trips tellen nu mee: hun vluchten komen via getCachedFlights
+                            // (UUID → OwnFlights). Geen ShareId → byAirport groepeert op user|tripId.
                             aPairs.push({
                                 user: oEntry.person.UserName,
                                 tripId: oTrip.TripId,
                                 tripName: oTrip.Name,
-                                shareId: oTrip.ShareId
+                                shareId: oTrip.ShareId,
+                                // goedkeuring per kopie → de aggregatie telt enkel goedgekeurde
+                                // vluchten (eigen trip draagt approvalStatus; TripPin via ext-map)
+                                isOwn: !!oTrip._isOwn,
+                                approvalStatus: oTrip.approvalStatus
                             });
                         });
                     });
@@ -190,12 +251,14 @@ sap.ui.define([
         getFlightAggregate: function () {
             var that = this;
             if (!this._pFlightAgg) {
-                // airlines-lijst meenemen zodat de Overview ook airlines zónder vluchten toont
+                // airlines-lijst meenemen zodat de Overview ook airlines zónder vluchten toont;
+                // de TripExtensions-map → enkel goedgekeurde trips tellen in de aggregaten
                 this._pFlightAgg = Promise.all([
                     this.getFlightData(),
-                    this.getCachedList("airlines", "/Airlines")
+                    this.getCachedList("airlines", "/Airlines"),
+                    this.getTripExtensions()
                 ]).then(function (aResults) {
-                    return Aggregate.aggregate(aResults[0], null, aResults[1]);
+                    return Aggregate.aggregate(aResults[0], null, aResults[1], aResults[2]);
                 }).catch(function (oError) {
                     that._pFlightAgg = null;
                     throw oError;
@@ -245,6 +308,31 @@ sap.ui.define([
                     });
             }
             return this._pPersonExt;
+        },
+
+        // TripExtension (goedkeuringsstatus per TripPin-trip) → map "personUserName|tripId" → status.
+        // Gememoïseerd zoals getPersonExtensions, maar GEËVICT bij elke goedkeurings-mutatie
+        // (approve/reject/submit in AllTrips) zodat de tellende views meteen kloppen. Eigen trips
+        // staan hier NIET in — die dragen approvalStatus in de trip-cache zelf.
+        getTripExtensions: function () {
+            if (!this._pTripExt) {
+                var that = this;
+                this._pTripExt = this.getModel("trips").bindList("/TripExtensions")
+                    .requestContexts(0, 1000)
+                    .then(function (aContexts) {
+                        var mExt = {};
+                        aContexts.forEach(function (oCtx) {
+                            var o = oCtx.getObject();
+                            mExt[o.personUserName + "|" + o.tripId] = o.approvalStatus;
+                        });
+                        return mExt;
+                    })
+                    .catch(function (oError) {
+                        that._pTripExt = null;
+                        throw oError;
+                    });
+            }
+            return this._pTripExt;
         },
 
         needsLogin: function () {

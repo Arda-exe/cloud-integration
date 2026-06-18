@@ -83,15 +83,29 @@
                             <card:Header title="{i18n>topTravellersTitle}" iconSrc="sap-icon://suitcase" />
                         </f:header>
                         <f:content>
-                            <ScrollContainer height="100%" width="100%" vertical="true" horizontal="false">
-                                <List items="{view>/topTravellers}" showSeparators="Inner">
-                                    <StandardListItem
-                                        title="{view>name}"
-                                        info="{view>tripsLabel}"
-                                        icon="sap-icon://customer"
-                                        iconDensityAware="false" />
-                                </List>
-                            </ScrollContainer>
+                            <!-- Page met subHeader = vaste toggle bovenaan + native scrollende
+                                 inhoud (zelfde patroon als het Airports-zijpaneel). Vult de kaart
+                                 en scrollt bij overloop; de Label/Text passen zich aan de breedte aan. -->
+                            <Page showHeader="false" backgroundDesign="Transparent">
+                                <subHeader>
+                                    <Toolbar>
+                                        <SegmentedButton selectedKey="{view>/travellersRankBy}"
+                                            selectionChange=".onTravellersRankChange">
+                                            <items>
+                                                <SegmentedButtonItem key="trips" text="{i18n>rankByTrips}" />
+                                                <SegmentedButtonItem key="budget" text="{i18n>rankByBudget}" />
+                                            </items>
+                                        </SegmentedButton>
+                                    </Toolbar>
+                                </subHeader>
+                                <VBox class="sapUiSmallMargin" items="{view>/topTravellers}">
+                                    <HBox class="sapUiTinyMarginBottom" width="100%"
+                                        justifyContent="SpaceBetween" alignItems="Center">
+                                        <Label text="{view>name}" design="Bold" />
+                                        <Text text="{view>valueLabel}" />
+                                    </HBox>
+                                </VBox>
+                            </Page>
                         </f:content>
                     </f:Card>
 

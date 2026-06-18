@@ -124,7 +124,9 @@ sap.ui.define([
         // afkomstig van de airportFocus-route (airports/{iata}); PlanItems levert alleen
         // IATA, terwijl de markers op ICAO gesleuteld zijn → eerst IATA→ICAO opzoeken
         _onFocusRoute: function (oEvent) {
-            this._onShown();
+            // enkel de kaart herberekenen; _focusByIata herselecteert de doel-luchthaven en
+            // herlaadt zélf de stats → geen dubbele getFlightAggregate-fetch via _onShown
+            this._invalidateMapSoon();
             this._focusByIata(oEvent.getParameter("arguments").iata);
         },
 
@@ -174,6 +176,14 @@ sap.ui.define([
 
         _onShown: function () {
             this._invalidateMapSoon();
+            // goedkeuringen elders (All Trips) hebben het flight-aggregaat geëvict → de
+            // "trips via deze luchthaven" (enkel goedgekeurde trips) herladen wanneer een
+            // detail openstaat
+            var oVM = this.getView().getModel("view");
+            if (oVM.getProperty("/selected/has")) {
+                oVM.setProperty("/selected/busy", true);
+                this._loadAirportStats(oVM.getProperty("/selected/iata"));
+            }
         },
 
         // de kaart heeft een size-herberekening nodig nadat hij verborgen was of nadat het

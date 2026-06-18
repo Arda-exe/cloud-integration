@@ -12,6 +12,20 @@ sap.ui.define([
     var ROLE_LANDING = { TravelCoordinator: "employees", TeamLead: "employees", HR: "overview" };
     var ROLE_USER = { TravelCoordinator: "coordinator", TeamLead: "teamlead", HR: "hr" };
 
+    // welke tabs elke rol mag zien (Coordinator = alles). Gedeeld door de IconTabFilter-
+    // zichtbaarheid (App.view) én de route-guard (App.controller), zodat een verborgen tab
+    // ook niet via de hash/deep-link bereikbaar blijft.
+    var ROLE_TABS = {
+        TravelCoordinator: ["overview", "employees", "airports"],
+        TeamLead:          ["employees", "airports"],
+        HR:                ["overview", "airports"]
+    };
+
+    // sessionStorage-sleutels: de lokaal gekozen rol (refresh-persistentie) + de gekozen
+    // landing-tab die de XSUAA-redirect op BTP moet overleven (een #hash overleeft die niet)
+    var STORAGE_ROLE = "primepath.role";
+    var STORAGE_LANDING = "primepath.landing";
+
     // eigen trips/vluchten hebben een UUID-sleutel; TripPin-trips een numerieke id
     var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,20 +49,58 @@ sap.ui.define([
             this._pTripExt = null;
 
             this._bLocal = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+            // op BTP draait de app na de XSUAA-login onder /secure/ (de approuter mirror-route);
+            // de publieke launchpad draait onder /dashboard/webapp/ zónder login
+            this._bSecure = window.location.pathname.indexOf("/secure/") === 0;
             this._sAuthHeader = null;
 
             this.setModel(new JSONModel({
                 showChrome: false,
-                user: { id: "", initials: "", roles: [], isCoordinator: false, roleLabel: "" }
+                isLocal: this._bLocal,
+                user: { id: "", initials: "", roles: [], isCoordinator: false,
+                    isTeamLead: false, isHR: false, roleLabel: "" }
             }), "app");
 
-            this.getRouter().initialize();
+            // de hash MOET vóór router.initialize() gelezen worden: bij een refresh op een
+            // deep-link (#/employees/x) behouden we díe pagina i.p.v. naar de landing te springen.
+            // Rechtstreeks uit de URL: de HashChanger is vóór initialize() nog niet "aan".
+            var bHasRoute = !!window.location.hash.replace(/^#\/?/, "");
+            var that = this;
 
-            if (!this._bLocal) {
-                var that = this;
+            if (this._bLocal) {
+                // lokaal: een eerder gekozen rol uit sessionStorage herstellen zodat een refresh
+                // niet naar de launchpad bounced. De auth-header MOET gezet zijn vóór initialize()
+                // (onRouteMatched vuurt synchroon en checkt needsLogin()).
+                var sRole = this._readStorage(STORAGE_ROLE);
+                if (sRole && ROLE_USER[sRole]) {
+                    this._applyLocalAuth(sRole);
+                }
+                this.getRouter().initialize();
+                if (!bHasRoute && this._sAuthHeader) {
+                    this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
+                }
+            } else if (this._bSecure) {
+                // BTP, ná login: gedraagt zich als "ingelogd". Deep-link behouden bij refresh →
+                // enkel naar de landing als er geen route is (verse binnenkomst via /secure).
+                this.getRouter().initialize();
+                var sLandingHint = this._readStorage(STORAGE_LANDING);
+                this._removeStorage(STORAGE_LANDING);
+                if (!bHasRoute && sLandingHint) {
+                    // meteen naar de op de launchpad gekozen tab → geen launchpad-flash ná login
+                    this.getRouter().navTo(sLandingHint);
+                }
+                // whoami draait parallel: vult de rol/role-gating; bij verse binnenkomst zónder
+                // hint landen we op de échte XSUAA-rol zodra het antwoord binnen is
                 this._loadCurrentUser().then(function (aRoles) {
-                    that._routeToRoleLanding(aRoles || []);
+                    if (!bHasRoute && !sLandingHint) {
+                        that._routeToRoleLanding(aRoles || []);
+                    }
                 });
+            } else {
+                // BTP, publieke launchpad (vóór login): enkel de launchpad tonen. GEEN whoami —
+                // /user/whoami() is xsuaa-protected en zou een XHR 302'en. De launchpad heeft
+                // geen geauthenticeerde request nodig.
+                this.getRouter().initialize();
             }
         },
 
@@ -339,22 +391,98 @@ sap.ui.define([
             return this._bLocal && !this._sAuthHeader;
         },
 
-        loginAs: function (sRole) {
+        // veilige sessionStorage-toegang (kan in privacy-/incognitomodi gooien)
+        _readStorage: function (sKey) {
+            try { return window.sessionStorage.getItem(sKey); } catch (e) { return null; }
+        },
+        _writeStorage: function (sKey, sValue) {
+            try { window.sessionStorage.setItem(sKey, sValue); } catch (e) { /* private mode */ }
+        },
+        _removeStorage: function (sKey) {
+            try { window.sessionStorage.removeItem(sKey); } catch (e) { /* private mode */ }
+        },
+
+        // lokale mock-auth: Basic-header in de 4 OData-modellen injecteren + user-context zetten.
+        // Gedeeld door loginAs (rol-klik) en init (herstel uit sessionStorage na refresh).
+        _applyLocalAuth: function (sRole) {
             var that = this;
+            this._sAuthHeader = "Basic " + btoa(ROLE_USER[sRole] + ":test");
+            ["people", "trips", "airlines", "airports"].forEach(function (sName) {
+                try {
+                    that.getModel(sName).changeHttpHeaders({ Authorization: that._sAuthHeader });
+                } catch (e) {}
+            });
+            var oApp = this.getModel("app");
+            oApp.setProperty("/user/roles", [sRole]);
+            oApp.setProperty("/user/isCoordinator", sRole === "TravelCoordinator");
+            oApp.setProperty("/user/isTeamLead", sRole === "TeamLead");
+            oApp.setProperty("/user/isHR", sRole === "HR");
+            oApp.setProperty("/user/roleLabel", this._roleLabel([sRole]));
+            this._loadCurrentUser();
+        },
+
+        loginAs: function (sRole) {
+            // lokaal: mock-auth toepassen, de rol onthouden (refresh-persistentie) en naar de landing
             if (this._bLocal && ROLE_USER[sRole]) {
-                this._sAuthHeader = "Basic " + btoa(ROLE_USER[sRole] + ":test");
-                ["people", "trips", "airlines", "airports"].forEach(function (sName) {
-                    try {
-                        that.getModel(sName).changeHttpHeaders({ Authorization: that._sAuthHeader });
-                    } catch (e) {}
-                });
-                var oApp = this.getModel("app");
-                oApp.setProperty("/user/roles", [sRole]);
-                oApp.setProperty("/user/isCoordinator", sRole === "TravelCoordinator");
-                oApp.setProperty("/user/roleLabel", this._roleLabel([sRole]));
-                this._loadCurrentUser();
+                this._applyLocalAuth(sRole);
+                this._writeStorage(STORAGE_ROLE, sRole);
+                this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
+                return;
             }
+            // BTP, publieke launchpad: volledige paginanavigatie naar de beveiligde mirror → de
+            // approuter forceert de XSUAA-login. De gekozen landing-tab gaat via sessionStorage mee
+            // (de #hash overleeft de XSUAA-redirect niet).
+            if (!this._bLocal && !this._bSecure) {
+                this._writeStorage(STORAGE_LANDING, ROLE_LANDING[sRole] || "overview");
+                window.location.assign("/secure/index.html");
+                return;
+            }
+            // BTP, al in /secure (launchpad zelden hier bereikt): gewoon navigeren
             this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
+        },
+
+        // "Switch role": lokaal de gekozen rol vergeten + de auth-context wissen en terug naar de
+        // launchpad. Op BTP via de approuter uitloggen → dropt de XSUAA-sessie en landt op de
+        // publieke launchpad (logoutPage in xs-app.json), klaar voor een nieuwe login.
+        logout: function () {
+            if (this._bLocal) {
+                this._removeStorage(STORAGE_ROLE);
+                this._sAuthHeader = null;
+                this.getModel("app").setProperty("/user",
+                    { id: "", initials: "", roles: [], isCoordinator: false,
+                        isTeamLead: false, isHR: false, roleLabel: "" });
+                this.getRouter().navTo("launchpad");
+                return;
+            }
+            window.location.assign("/logout");
+        },
+
+        // BTP publieke launchpad → "Sign in": volledige paginanavigatie naar de beveiligde mirror
+        // zodat de approuter de XSUAA-login forceert. Geen landing-hint → ná login bepaalt de
+        // échte XSUAA-rol de landing (_routeToRoleLanding).
+        enterApp: function () {
+            window.location.assign("/secure/index.html");
+        },
+
+        // mag de huidige gebruiker deze tab(-route) zien? Onbekende rol (whoami nog bezig) →
+        // toelaten zodat de async-gap niemand wegstuurt; Coordinator ziet alles.
+        isTabAllowed: function (sTabKey) {
+            var aRoles = this.getModel("app").getProperty("/user/roles") || [];
+            if (!aRoles.length || aRoles.indexOf("TravelCoordinator") !== -1) { return true; }
+            for (var i = 0; i < aRoles.length; i++) {
+                var aTabs = ROLE_TABS[aRoles[i]];
+                if (aTabs && aTabs.indexOf(sTabKey) !== -1) { return true; }
+            }
+            return false;
+        },
+
+        // de landing-tab voor de huidige rol (eerste match in ROLES); fallback overview
+        roleLanding: function () {
+            var aRoles = this.getModel("app").getProperty("/user/roles") || [];
+            for (var i = 0; i < ROLES.length; i++) {
+                if (aRoles.indexOf(ROLES[i]) !== -1) { return ROLE_LANDING[ROLES[i]]; }
+            }
+            return "overview";
         },
 
         _roleLabel: function (aRoles) {
@@ -396,6 +524,8 @@ sap.ui.define([
                     oModel.setProperty("/user/initials", sId.slice(0, 2).toUpperCase());
                     oModel.setProperty("/user/roles", aRoles);
                     oModel.setProperty("/user/isCoordinator", aRoles.indexOf("TravelCoordinator") !== -1);
+                    oModel.setProperty("/user/isTeamLead", aRoles.indexOf("TeamLead") !== -1);
+                    oModel.setProperty("/user/isHR", aRoles.indexOf("HR") !== -1);
                     oModel.setProperty("/user/roleLabel", that._roleLabel(aRoles));
                     return aRoles;
                 })

@@ -38,9 +38,14 @@
             selectedKey="overview"
             select=".onTabSelect"
             mode="Inline">
+            <!-- tabs per rol: HR ziet Overview (rapportage), TeamLead ziet Employees, Coordinator
+                 ziet alles; Airports is voor iedereen. De route-guard in App.controller dwingt
+                 dit ook op hash-niveau af (een verborgen tab is anders nog via de URL bereikbaar). -->
             <items>
-                <IconTabFilter key="overview" text="{i18n>tabOverview}" />
-                <IconTabFilter key="employees" text="{i18n>tabEmployees}" />
+                <IconTabFilter key="overview" text="{i18n>tabOverview}"
+                    visible="{= ${app>/user/isCoordinator} || ${app>/user/isHR} }" />
+                <IconTabFilter key="employees" text="{i18n>tabEmployees}"
+                    visible="{= ${app>/user/isCoordinator} || ${app>/user/isTeamLead} }" />
                 <IconTabFilter key="airports" text="{i18n>tabAirports}" />
             </items>
         </IconTabHeader>

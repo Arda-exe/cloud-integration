@@ -49,6 +49,15 @@ sap.ui.define([
                 this.getRouter().navTo("launchpad");
                 return;
             }
+            // rol-scoping op route-niveau: een voor deze rol verborgen top-level tab mag ook niet
+            // via de hash/deep-link bereikbaar zijn → terug naar de eigen landing. Detail-routes
+            // (employee/trip/airportFocus) blijven open voor cross-navigatie en worden door de
+            // backend-scope beschermd.
+            var bTopTab = sRoute === "overview" || sRoute === "employees" || sRoute === "airports";
+            if (bTopTab && !oComponent.isTabAllowed(sRoute)) {
+                this.getRouter().navTo(oComponent.roleLanding());
+                return;
+            }
             // detail routes horen bij de tab van hun lijst (allTrips wordt vanuit Employees
             // geopend → blijft onder de Employees-tab; geen aparte Trips-tab, zie domeinregel)
             var mRouteToTab = {
@@ -63,9 +72,10 @@ sap.ui.define([
                 .navTo(oEvent.getParameter("key"));
         },
 
-        // terug naar de launchpad om een andere rol te kiezen
+        // terug naar de launchpad om een andere rol te kiezen. Lokaal = de auth-context wissen +
+        // launchpad; op BTP = uitloggen via de approuter (XSUAA-sessie dropt → publieke launchpad).
         onSwitchRole: function () {
-            this.getRouter().navTo("launchpad");
+            this.getOwnerComponent().logout();
         },
 
         // ---- Global search (feature 7) -------------------------------------

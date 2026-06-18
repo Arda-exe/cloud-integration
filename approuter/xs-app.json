@@ -1,9 +1,9 @@
 {
-    "welcomeFile": "/dashboard/webapp/index.html",
+    "welcomeFile": "/secure/index.html",
     "authenticationMethod": "route",
     "logout": {
         "logoutEndpoint": "/logout",
-        "logoutPage": "/dashboard/webapp/index.html"
+        "logoutPage": "/"
     },
     "routes": [
         {
@@ -20,13 +20,7 @@
         {
             "source": "^/dashboard/webapp/(.*)$",
             "destination": "srv-api",
-            "authenticationType": "none"
-        },
-        {
-            "source": "^/$",
-            "target": "/dashboard/webapp/index.html",
-            "destination": "srv-api",
-            "authenticationType": "none"
+            "authenticationType": "xsuaa"
         }
     ]
 }

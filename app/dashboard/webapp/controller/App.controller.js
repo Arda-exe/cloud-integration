@@ -73,9 +73,10 @@ sap.ui.define([
         },
 
         // terug naar de launchpad om een andere rol te kiezen. Lokaal = de auth-context wissen +
-        // launchpad; op BTP = uitloggen via de approuter (XSUAA-sessie dropt → publieke launchpad).
+        // launchpad; op BTP = enkel de actieve rol loslaten → launchpad (de XSUAA-sessie blijft,
+        // dus geen nieuwe login nodig; echte sign-out gebeurt via de launchpad-link).
         onSwitchRole: function () {
-            this.getOwnerComponent().logout();
+            this.getOwnerComponent().switchRole();
         },
 
         // ---- Global search (feature 7) -------------------------------------

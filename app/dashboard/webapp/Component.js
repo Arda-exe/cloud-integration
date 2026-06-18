@@ -21,10 +21,11 @@ sap.ui.define([
         HR:                ["overview", "airports"]
     };
 
-    // sessionStorage-sleutels: de lokaal gekozen rol (refresh-persistentie) + de gekozen
-    // landing-tab die de XSUAA-redirect op BTP moet overleven (een #hash overleeft die niet)
+    // sessionStorage-sleutels: de lokaal gekozen rol (refresh-persistentie) + de op BTP
+    // actief-gekozen rol (rol-switcher: welke van je rollen je nu "speelt"), zodat een refresh
+    // op een deep-link de scope én de pagina behoudt.
     var STORAGE_ROLE = "primepath.role";
-    var STORAGE_LANDING = "primepath.landing";
+    var STORAGE_ACTIVE_ROLE = "primepath.activeRole";
 
     // eigen trips/vluchten hebben een UUID-sleutel; TripPin-trips een numerieke id
     var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,11 +55,16 @@ sap.ui.define([
             this._bSecure = window.location.pathname.indexOf("/secure/") === 0;
             this._sAuthHeader = null;
 
+            // user: "has*" = welke rollen de gebruiker BEZIT (stuurt de launchpad-tegels);
+            // "is*"/roleLabel/activeRole = de ENE rol die nu actief gespeeld wordt (stuurt de
+            // tab-/actie-zichtbaarheid in de app). Een multi-rol-gebruiker kiest op de launchpad.
             this.setModel(new JSONModel({
                 showChrome: false,
                 isLocal: this._bLocal,
-                user: { id: "", initials: "", roles: [], isCoordinator: false,
-                    isTeamLead: false, isHR: false, roleLabel: "" }
+                user: { id: "", initials: "", roles: [],
+                    hasCoordinator: false, hasTeamLead: false, hasHR: false,
+                    isCoordinator: false, isTeamLead: false, isHR: false,
+                    activeRole: "", roleLabel: "" }
             }), "app");
 
             // de hash MOET vóór router.initialize() gelezen worden: bij een refresh op een
@@ -80,20 +86,24 @@ sap.ui.define([
                     this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
                 }
             } else if (this._bSecure) {
-                // BTP, ná login: gedraagt zich als "ingelogd". Deep-link behouden bij refresh →
-                // enkel naar de landing als er geen route is (verse binnenkomst via /secure).
+                // BTP, ná login: gedraagt zich als "ingelogd". De launchpad is hier een POST-login
+                // welkom/rol-kiezer (rol-switcher). whoami vult de bezeten rollen; daarna:
+                //  - eerder actief-gekozen rol (uit sessionStorage) die de gebruiker nog bezit →
+                //    de scope herstellen en de deep-link/pagina behouden (refresh),
+                //  - anders → de launchpad tonen zodat de gebruiker een rol kiest.
                 this.getRouter().initialize();
-                var sLandingHint = this._readStorage(STORAGE_LANDING);
-                this._removeStorage(STORAGE_LANDING);
-                if (!bHasRoute && sLandingHint) {
-                    // meteen naar de op de launchpad gekozen tab → geen launchpad-flash ná login
-                    this.getRouter().navTo(sLandingHint);
-                }
-                // whoami draait parallel: vult de rol/role-gating; bij verse binnenkomst zónder
-                // hint landen we op de échte XSUAA-rol zodra het antwoord binnen is
                 this._loadCurrentUser().then(function (aRoles) {
-                    if (!bHasRoute && !sLandingHint) {
-                        that._routeToRoleLanding(aRoles || []);
+                    aRoles = aRoles || [];
+                    var sActive = that._readStorage(STORAGE_ACTIVE_ROLE);
+                    if (sActive && aRoles.indexOf(sActive) !== -1) {
+                        // scope herstellen; bij een refresh op een deep-link de pagina behouden
+                        that._setActiveRole(sActive);
+                        if (!bHasRoute) {
+                            that.getRouter().navTo(ROLE_LANDING[sActive] || "overview");
+                        }
+                    } else {
+                        // geen (herstelbare) actieve rol → de gebruiker moet er eerst één kiezen
+                        that.getRouter().navTo("launchpad");
                     }
                 });
             } else {
@@ -402,6 +412,26 @@ sap.ui.define([
             try { window.sessionStorage.removeItem(sKey); } catch (e) { /* private mode */ }
         },
 
+        // alle gememoïseerde datasets + de OData-modelcaches droppen. Nodig bij een rolwissel:
+        // de backend SCOPET data per rol (srv/people-service.js → People/PersonExtensions worden
+        // op de toegelaten UserNames gefilterd), dus zonder dit toont de volgende pagina nog de
+        // gescopete data van de vórige rol. Dit is het in-app equivalent van een harde refresh.
+        _resetDataCaches: function () {
+            this._mListCache = {};
+            this._mTripsCache = {};
+            this._mFlightCache = {};
+            this._pTripData = null;
+            this._pFlightData = null;
+            this._pFlightAgg = null;
+            this._pAirportsByIata = null;
+            this._pPersonExt = null;
+            this._pTripExt = null;
+            ["people", "trips", "airlines", "airports"].forEach(function (sName) {
+                var oModel = this.getModel(sName);
+                try { if (oModel) { oModel.refresh(); } } catch (e) { /* pending changes */ }
+            }, this);
+        },
+
         // lokale mock-auth: Basic-header in de 4 OData-modellen injecteren + user-context zetten.
         // Gedeeld door loginAs (rol-klik) en init (herstel uit sessionStorage na refresh).
         _applyLocalAuth: function (sRole) {
@@ -412,77 +442,107 @@ sap.ui.define([
                     that.getModel(sName).changeHttpHeaders({ Authorization: that._sAuthHeader });
                 } catch (e) {}
             });
+            // nieuwe identiteit → de gescopete data van de vorige rol weggooien (zie _resetDataCaches)
+            this._resetDataCaches();
+            // lokaal heeft de mock-user precies één rol: die bezit hij én speelt hij meteen.
             var oApp = this.getModel("app");
             oApp.setProperty("/user/roles", [sRole]);
-            oApp.setProperty("/user/isCoordinator", sRole === "TravelCoordinator");
-            oApp.setProperty("/user/isTeamLead", sRole === "TeamLead");
-            oApp.setProperty("/user/isHR", sRole === "HR");
-            oApp.setProperty("/user/roleLabel", this._roleLabel([sRole]));
+            oApp.setProperty("/user/hasCoordinator", sRole === "TravelCoordinator");
+            oApp.setProperty("/user/hasTeamLead", sRole === "TeamLead");
+            oApp.setProperty("/user/hasHR", sRole === "HR");
+            this._setActiveRole(sRole);
             this._loadCurrentUser();
         },
 
+        // de launchpad-tegel-klik: lokaal = echte mock-login als die rol; op BTP (ná XSUAA-login)
+        // = "speel" die rol (rol-switcher die de UI scopet), geen nieuwe login.
+        pickRole: function (sRole) {
+            if (this._bLocal) { this.loginAs(sRole); return; }
+            this.actAsRole(sRole);
+        },
+
+        // lokaal: mock-auth toepassen, de rol onthouden (refresh-persistentie) en naar de landing.
         loginAs: function (sRole) {
-            // lokaal: mock-auth toepassen, de rol onthouden (refresh-persistentie) en naar de landing
             if (this._bLocal && ROLE_USER[sRole]) {
                 this._applyLocalAuth(sRole);
                 this._writeStorage(STORAGE_ROLE, sRole);
                 this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
-                return;
             }
-            // BTP, publieke launchpad: volledige paginanavigatie naar de beveiligde mirror → de
-            // approuter forceert de XSUAA-login. De gekozen landing-tab gaat via sessionStorage mee
-            // (de #hash overleeft de XSUAA-redirect niet).
-            if (!this._bLocal && !this._bSecure) {
-                this._writeStorage(STORAGE_LANDING, ROLE_LANDING[sRole] || "overview");
-                window.location.assign("/secure/index.html");
-                return;
-            }
-            // BTP, al in /secure (launchpad zelden hier bereikt): gewoon navigeren
+        },
+
+        // enkel de ACTIEVE (gespeelde) rol zetten — de "is*"-vlaggen sturen de tab-/actie-
+        // zichtbaarheid in de app. Gedeeld door _applyLocalAuth, actAsRole en het refresh-herstel.
+        _setActiveRole: function (sRole) {
+            var oApp = this.getModel("app");
+            oApp.setProperty("/user/isCoordinator", sRole === "TravelCoordinator");
+            oApp.setProperty("/user/isTeamLead", sRole === "TeamLead");
+            oApp.setProperty("/user/isHR", sRole === "HR");
+            oApp.setProperty("/user/activeRole", sRole);
+            oApp.setProperty("/user/roleLabel", this._roleLabel([sRole]));
+        },
+
+        // BTP, ná login: één van je rollen "spelen" → scope de UI, onthoud de keuze (refresh) en
+        // navigeer naar de landing van die rol.
+        actAsRole: function (sRole) {
+            this._setActiveRole(sRole);
+            this._writeStorage(STORAGE_ACTIVE_ROLE, sRole);
             this.getRouter().navTo(ROLE_LANDING[sRole] || "overview");
         },
 
-        // "Switch role": lokaal de gekozen rol vergeten + de auth-context wissen en terug naar de
-        // launchpad. Op BTP via de approuter uitloggen → dropt de XSUAA-sessie en landt op de
-        // publieke launchpad (logoutPage in xs-app.json), klaar voor een nieuwe login.
+        // BTP "Switch role": de actieve rol loslaten (GEEN XSUAA-logout) en terug naar de launchpad
+        // om een andere bezeten rol te kiezen.
+        clearActiveRole: function () {
+            var oApp = this.getModel("app");
+            oApp.setProperty("/user/isCoordinator", false);
+            oApp.setProperty("/user/isTeamLead", false);
+            oApp.setProperty("/user/isHR", false);
+            oApp.setProperty("/user/activeRole", "");
+            oApp.setProperty("/user/roleLabel", "");
+            this._removeStorage(STORAGE_ACTIVE_ROLE);
+            this.getRouter().navTo("launchpad");
+        },
+
+        // "Switch role" in de ShellBar: lokaal = uitloggen → launchpad; op BTP = enkel de actieve
+        // rol loslaten → launchpad (de XSUAA-sessie blijft, dus geen nieuwe login nodig).
+        switchRole: function () {
+            if (this._bLocal) { this.logout(); return; }
+            this.clearActiveRole();
+        },
+
+        // echte sign-out. Lokaal: de mock-auth/rolcontext wissen → launchpad. Op BTP: via de
+        // approuter uitloggen → dropt de XSUAA-sessie (logoutEndpoint in xs-app.json).
         logout: function () {
             if (this._bLocal) {
                 this._removeStorage(STORAGE_ROLE);
+                this._removeStorage(STORAGE_ACTIVE_ROLE);
                 this._sAuthHeader = null;
                 this.getModel("app").setProperty("/user",
-                    { id: "", initials: "", roles: [], isCoordinator: false,
-                        isTeamLead: false, isHR: false, roleLabel: "" });
+                    { id: "", initials: "", roles: [],
+                        hasCoordinator: false, hasTeamLead: false, hasHR: false,
+                        isCoordinator: false, isTeamLead: false, isHR: false,
+                        activeRole: "", roleLabel: "" });
                 this.getRouter().navTo("launchpad");
                 return;
             }
             window.location.assign("/logout");
         },
 
-        // BTP publieke launchpad → "Sign in": volledige paginanavigatie naar de beveiligde mirror
-        // zodat de approuter de XSUAA-login forceert. Geen landing-hint → ná login bepaalt de
-        // échte XSUAA-rol de landing (_routeToRoleLanding).
-        enterApp: function () {
-            window.location.assign("/secure/index.html");
-        },
-
-        // mag de huidige gebruiker deze tab(-route) zien? Onbekende rol (whoami nog bezig) →
-        // toelaten zodat de async-gap niemand wegstuurt; Coordinator ziet alles.
+        // mag de huidige gebruiker deze tab(-route) zien? Gebaseerd op de ACTIEVE rol (de "is*"-
+        // vlaggen), niet op alle bezeten rollen — zo blijft een verborgen tab ook ná de rol-keuze
+        // uit de scope. Nog geen actieve rol (launchpad / whoami bezig) → toelaten.
         isTabAllowed: function (sTabKey) {
-            var aRoles = this.getModel("app").getProperty("/user/roles") || [];
-            if (!aRoles.length || aRoles.indexOf("TravelCoordinator") !== -1) { return true; }
-            for (var i = 0; i < aRoles.length; i++) {
-                var aTabs = ROLE_TABS[aRoles[i]];
-                if (aTabs && aTabs.indexOf(sTabKey) !== -1) { return true; }
-            }
+            var oUser = this.getModel("app").getProperty("/user");
+            if (!oUser.isCoordinator && !oUser.isTeamLead && !oUser.isHR) { return true; }
+            if (oUser.isCoordinator) { return true; }
+            if (oUser.isTeamLead && ROLE_TABS.TeamLead.indexOf(sTabKey) !== -1) { return true; }
+            if (oUser.isHR && ROLE_TABS.HR.indexOf(sTabKey) !== -1) { return true; }
             return false;
         },
 
-        // de landing-tab voor de huidige rol (eerste match in ROLES); fallback overview
+        // de landing-tab voor de actief gespeelde rol; fallback overview
         roleLanding: function () {
-            var aRoles = this.getModel("app").getProperty("/user/roles") || [];
-            for (var i = 0; i < ROLES.length; i++) {
-                if (aRoles.indexOf(ROLES[i]) !== -1) { return ROLE_LANDING[ROLES[i]]; }
-            }
-            return "overview";
+            var sActive = this.getModel("app").getProperty("/user/activeRole");
+            return ROLE_LANDING[sActive] || "overview";
         },
 
         _roleLabel: function (aRoles) {
@@ -495,23 +555,15 @@ sap.ui.define([
             return "";
         },
 
-        _routeToRoleLanding: function (aRoles) {
-            var sLanding = "overview";
-            for (var i = 0; i < ROLES.length; i++) {
-                if (aRoles.indexOf(ROLES[i]) !== -1) {
-                    sLanding = ROLE_LANDING[ROLES[i]];
-                    break;
-                }
-            }
-            this.getRouter().navTo(sLanding);
-        },
-
         _loadCurrentUser: function () {
-            var that = this;
             var oModel = this.getModel("app");
-            var mHeaders = { Accept: "application/json" };
+            // no-store: de whoami-GET mag NIET uit de browsercache komen. Zonder dit hergebruikt de
+            // browser (zelfde URL, geen Vary: Authorization) het antwoord van de vórige identiteit —
+            // bij een rolwissel (andere XSUAA-user op BTP, ander mock-account lokaal) krijg je dan de
+            // gecachte rollen → de launchpad-tegels/tabs blijven "vastzitten" op die eerste rol.
+            var mHeaders = { Accept: "application/json", "Cache-Control": "no-cache" };
             if (this._sAuthHeader) { mHeaders.Authorization = this._sAuthHeader; }
-            return fetch("/user/whoami()", { headers: mHeaders })
+            return fetch("/user/whoami()", { headers: mHeaders, cache: "no-store" })
                 .then(function (oResponse) {
                     return oResponse.ok ? oResponse.json() : null;
                 })
@@ -523,10 +575,12 @@ sap.ui.define([
                     oModel.setProperty("/user/id", sId);
                     oModel.setProperty("/user/initials", sId.slice(0, 2).toUpperCase());
                     oModel.setProperty("/user/roles", aRoles);
-                    oModel.setProperty("/user/isCoordinator", aRoles.indexOf("TravelCoordinator") !== -1);
-                    oModel.setProperty("/user/isTeamLead", aRoles.indexOf("TeamLead") !== -1);
-                    oModel.setProperty("/user/isHR", aRoles.indexOf("HR") !== -1);
-                    oModel.setProperty("/user/roleLabel", that._roleLabel(aRoles));
+                    // membership ("has*") = welke rollen de gebruiker BEZIT (stuurt de launchpad-
+                    // tegels). De actieve "is*"-vlaggen worden pas bij de rol-keuze gezet (actAsRole) —
+                    // lokaal al synchroon via _applyLocalAuth.
+                    oModel.setProperty("/user/hasCoordinator", aRoles.indexOf("TravelCoordinator") !== -1);
+                    oModel.setProperty("/user/hasTeamLead", aRoles.indexOf("TeamLead") !== -1);
+                    oModel.setProperty("/user/hasHR", aRoles.indexOf("HR") !== -1);
                     return aRoles;
                 })
                 .catch(function () { return null; });

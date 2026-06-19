@@ -1,32 +1,28 @@
 const cds = require('@sap/cds')
 
-const BASE = cds.env.requires?.TripPin?.credentials?.url
-    ?? 'https://services.odata.org/V4/TripPinService'
-
-const fetchAllPages = async (url) => {
-    let results = []
-    let nextUrl = url
-    while (nextUrl) {
-        const res = await fetch(nextUrl)
-        const json = await res.json()
-        results = results.concat(json.value ?? [])
-        nextUrl = json['@odata.nextLink'] ?? null
+// TripPin pagineert server-side (±8 per pagina) en het CAP remote-service volgt @odata.nextLink
+// NIET automatisch, dus halen we alle pagina's zelf op via de remote service (die op BTP via de
+// Destination resolvet) met $skip tot een lege pagina terugkomt. Géén hardcoded URL, géén fetch.
+const fetchAll = async (tripin, entity) => {
+    const aAll = []
+    let iSkip = 0
+    for (;;) {
+        const oPage = await tripin.send({ method: 'GET', path: `${entity}?$skip=${iSkip}` })
+        const aRows = Array.isArray(oPage) ? oPage : (oPage?.value ?? [])
+        if (!aRows.length) break
+        aAll.push(...aRows)
+        iSkip += aRows.length
     }
-    return results
+    return aAll
 }
 
 module.exports = cds.service.impl(async function () {
-    this.on('READ', 'Airlines', async (req) => {
-        const rawUrl = req._.req?.url ?? ''
-        const entityIndex = rawUrl.indexOf('/Airlines')
-        const entityPath = rawUrl.substring(entityIndex + 1)
+    const tripin = await cds.connect.to('TripPin')
 
-        if (entityPath.includes("('")) {
-            const res = await fetch(`${BASE}/${entityPath}`)
-            const json = await res.json()
-            return json.value ?? json
-        }
-
-        return fetchAllPages(`${BASE}/Airlines`)
+    // Pure leesproxy → delegeer naar de TripPin remote service (resolvet via de Destination op BTP).
+    // Enkel-entiteit (lezen op key) gaat 1-op-1 door; een collectie pagineren we volledig.
+    this.on('READ', 'Airlines', (req) => {
+        if (req.query?.SELECT?.one) return tripin.run(req.query)
+        return fetchAll(tripin, 'Airlines')
     })
 })

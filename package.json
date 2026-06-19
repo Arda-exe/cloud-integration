@@ -31,9 +31,8 @@
       "TripPin": {
         "kind": "odata-v4",
         "model": "srv/external/TripPin",
-        "credentials": {
-          "url": "https://services.odata.org/V4/TripPinService"
-        }
+        "[development]": { "credentials": { "url": "https://services.odata.org/V4/TripPinService" } },
+        "[production]": { "credentials": { "destination": "TripPin", "path": "/" } }
       },
       "[production]": {
         "auth": "xsuaa",

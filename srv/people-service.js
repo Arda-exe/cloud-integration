@@ -1,33 +1,35 @@
 const cds = require('@sap/cds')
 const { scopedUserNames } = require('./scope')
 
-// TripPin pagineert server-side (±8 per pagina) en het CAP remote-service volgt @odata.nextLink
-// NIET automatisch, dus halen we alle pagina's zelf op via de remote service (die op BTP via de
-// Destination resolvet) met $skip tot een lege pagina terugkomt. Géén hardcoded URL, géén fetch.
-const fetchAll = async (tripin, entity) => {
-    const aAll = []
-    let iSkip = 0
-    for (;;) {
-        const oPage = await tripin.send({ method: 'GET', path: `${entity}?$skip=${iSkip}` })
-        const aRows = Array.isArray(oPage) ? oPage : (oPage?.value ?? [])
-        if (!aRows.length) break
-        aAll.push(...aRows)
-        iSkip += aRows.length
+const BASE = cds.env.requires?.TripPin?.credentials?.url
+    ?? 'https://services.odata.org/V4/TripPinService'
+
+const fetchAllPages = async (url) => {
+    let results = []
+    let nextUrl = url
+    while (nextUrl) {
+        const res = await fetch(nextUrl)
+        const json = await res.json()
+        results = results.concat(json.value ?? [])
+        nextUrl = json['@odata.nextLink'] ?? null
     }
-    return aAll
+    return results
 }
 
 module.exports = cds.service.impl(async function () {
-    const tripin = await cds.connect.to('TripPin')
-
     this.on('READ', 'People', async (req) => {
+        const rawUrl = req._.req?.url ?? ''
+        const entityIndex = rawUrl.indexOf('/People')
+        const entityPath = rawUrl.substring(entityIndex + 1)
+
         // rol-scoping: null = alles (TravelCoordinator), anders de toegelaten UserNames
         const oAllowed = await scopedUserNames(req)
 
-        // enkel-entiteit (EmployeeDetail bindElement, lezen op key) → delegeer naar de remote service
-        if (req.query?.SELECT?.one) {
-            const oPerson = await tripin.run(req.query)
-            // deep-link naar een persoon buiten de scope → 404
+        if (entityPath.includes("('")) {
+            const res = await fetch(`${BASE}/${entityPath}`)
+            const json = await res.json()
+            const oPerson = json.value ?? json
+            // deep-link naar een persoon buiten de scope (EmployeeDetail bindElement) → 404
             if (oAllowed && oPerson && !oAllowed.has(oPerson.UserName)) {
                 return req.reject(404)
             }
@@ -38,7 +40,7 @@ module.exports = cds.service.impl(async function () {
         // accounts van derden (JdbcUser-/JdbcName-, soms met DUPLICAAT-keys). Duplicaat-keys
         // laten het OData V4-model de hele /People-collectie afwijzen ("data laadt niet"),
         // dus filteren we de junk en ontdubbelen we defensief op UserName.
-        const aAll = await fetchAll(tripin, 'People')
+        const aAll = await fetchAllPages(`${BASE}/People`)
         const seen = {}
         return aAll.filter((p) => {
             if (!p || !p.UserName || /^Jdbc/i.test(p.UserName) || seen[p.UserName]) {

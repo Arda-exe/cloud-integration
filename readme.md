@@ -14,7 +14,7 @@ by a two-person team: **Arda** (frontend) and **Simon** (backend). Deployment ta
 | Layer | Technology |
 |---|---|
 | Backend | SAP CAP (Node.js, `@sap/cds` v9) with five OData V4 services: people, trips, airlines, airports, and user (whoami / role-gating) |
-| External data | Public [TripPin OData V4 service](https://services.odata.org/V4/TripPinService) (read-only), reached with a direct HTTP call |
+| External data | Public [TripPin OData V4 service](https://services.odata.org/V4/TripPinService), consumed read-only via a CAP remote service binding (resolved through a BTP Destination in production) |
 | Own data | CAP-managed tables: `TripExtension` (approval status for TripPin trips), `OwnTrip` / `OwnFlight` (coordinator-created trips and their flights), `PersonExtension` (team / company) — SQLite locally, SAP HANA Cloud in production |
 | Frontend | Freestyle SAPUI5 1.136 (XML views + JS controllers), theme `sap_fiori_3`, OData V4 models |
 | Map | Leaflet + OpenStreetMap |
@@ -22,9 +22,9 @@ by a two-person team: **Arda** (frontend) and **Simon** (backend). Deployment ta
 
 The app is **employee-centric**: trips exist in TripPin only as containment under a
 person (`People('user')/Trips`), and a trip id is only unique within that person. Trips
-are therefore reached via Employees, not via a separate landing tab. All write
-operations (approvals, notes, …) go to the CAP-managed `TripExtension` entity — TripPin
-itself is never modified.
+are therefore reached via Employees, not via a separate landing tab. All writes go to
+CAP-managed tables — approvals to `TripExtension`, coordinator-created trips to
+`OwnTrip` / `OwnFlight` — so TripPin itself is never modified.
 
 ## Getting started
 
@@ -42,6 +42,7 @@ Local login uses mocked basic auth. Test users (password `test` for all):
 | `coordinator` | TravelCoordinator |
 | `teamlead` | TeamLead |
 | `hr` | HR |
+| `super` | TravelCoordinator + TeamLead + HR (to test active-role scoping) |
 
 > Tip: browsers cache basic-auth credentials for the whole session — use an incognito
 > window (or `http://coordinator@localhost:4004/...`) to switch users.
@@ -77,8 +78,11 @@ Local login uses mocked basic auth. Test users (password `test` for all):
 
 ```
 app/dashboard/webapp/   SAPUI5 frontend (Component, manifest, views, controllers, i18n)
-db/schema.cds           TripExtension data model (namespace primepath)
-srv/                    CAP services + handlers
+db/schema.cds           CAP data model: TripExtension, OwnTrip, OwnFlight, PersonExtension (namespace primepath)
+srv/                    CAP services + handlers (people, trips, airlines, airports, user)
 srv/external/           Imported TripPin EDMX metadata
+server.js               Express static serving of the UI under /dashboard/webapp
+approuter/              BTP approuter (xs-app.json: public launchpad + XSUAA-protected app)
+mta.yaml                BTP Cloud Foundry deployment descriptor
 xs-security.json        XSUAA scopes & role templates
 ```

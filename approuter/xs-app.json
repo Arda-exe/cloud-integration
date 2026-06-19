@@ -15,7 +15,8 @@
         {
             "source": "^/(user|people|trips|airlines|airports)(/.*)?$",
             "destination": "srv-api",
-            "authenticationType": "xsuaa"
+            "authenticationType": "xsuaa",
+            "csrfProtection": false
         },
         {
             "source": "^/dashboard/webapp/(.*)$",

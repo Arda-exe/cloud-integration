@@ -25,7 +25,9 @@ sap.ui.define([
             this._oDateTimeFormat = DateFormat.getDateTimeInstance({ style: "medium" });
             this.getView().setModel(new JSONModel({
                 groups: [], count: 0, busy: true, employees: [],
-                newFlights: [], airports: [], airlines: []
+                newFlights: [], airports: [], airlines: [],
+                // create-dialog: gedeeld budget (AAN) of één bedrag per gekozen medewerker (UIT)
+                budgetSame: true, perEmployeeBudgets: []
             }), "view");
             this.getRouter().getRoute("allTrips")
                 .attachPatternMatched(this.onPatternMatched, this);
@@ -176,8 +178,7 @@ sap.ui.define([
         _patchOwnTrip: function (oRow, sStatus) {
             var that = this;
             var oComp = this.getOwnerComponent();
-            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
-            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+            var mHeaders = oComp._fetchHeaders({ "Content-Type": "application/json", Accept: "application/json" });
 
             fetch("/trips/OwnTrips('" + oRow.rawUuid + "')", {
                 method: "PATCH",
@@ -240,16 +241,21 @@ sap.ui.define([
         },
 
         _resetCreateForm: function () {
-            this.byId("tripEmployee").setSelectedKey("");
+            this.byId("tripEmployees").setSelectedKeys([]);
             this.byId("tripName").setValue("");
             this.byId("tripDestination").setValue("");
             this.byId("tripStartsAt").setDateValue(null);
             this.byId("tripEndsAt").setDateValue(null);
+            this.byId("tripBudgetSame").setSelected(true);
             this.byId("tripBudget").setValue("");
             this.byId("tripBudget").setValueState("None");
             this.byId("tripDescription").setValue("");
-            // wachtrij met toe te voegen vluchten leegmaken (verse array → cache-safe)
-            this.getView().getModel("view").setProperty("/newFlights", []);
+            // wachtrij + per-medewerker budgetrijen leegmaken; terug naar gedeeld budget
+            // (verse arrays → cache-safe)
+            var oVM = this.getView().getModel("view");
+            oVM.setProperty("/newFlights", []);
+            oVM.setProperty("/budgetSame", true);
+            oVM.setProperty("/perEmployeeBudgets", []);
         },
 
         // rode budget-foutstaat opheffen zodra de coordinator het veld bijwerkt
@@ -257,73 +263,110 @@ sap.ui.define([
             this.byId("tripBudget").setValueState("None");
         },
 
+        // medewerkerselectie gewijzigd → de per-medewerker budgetrijen mee laten lopen, zodat ze
+        // klaarstaan zodra de coordinator naar "budget per reiziger" wisselt
+        onTripEmployeesChange: function () {
+            this._syncPerEmployeeBudgets();
+        },
+
+        // checkbox "zelfde budget voor iedereen": AAN = één gedeeld veld; UIT = één veld per
+        // gekozen medewerker (rijen opnieuw opbouwen uit de huidige selectie)
+        onToggleBudgetSame: function (oEvent) {
+            var bSame = oEvent.getParameter("selected");
+            this.getView().getModel("view").setProperty("/budgetSame", bSame);
+            if (!bSame) { this._syncPerEmployeeBudgets(); }
+        },
+
+        // de per-medewerker budgetrijen synchroniseren met de huidige MultiComboBox-selectie.
+        // Reeds ingevoerde budgetten behouden (op UserName) zodat (de)selecteren niets wist.
+        _syncPerEmployeeBudgets: function () {
+            var oVM = this.getView().getModel("view");
+            var aKeys = this.byId("tripEmployees").getSelectedKeys();
+            var aEmployees = oVM.getProperty("/employees") || [];
+            var aPrev = oVM.getProperty("/perEmployeeBudgets") || [];
+            var mPrev = {};
+            aPrev.forEach(function (o) { mPrev[o.UserName] = o.budget; });
+            var aRows = aKeys.map(function (sKey) {
+                var oEmp = aEmployees.filter(function (e) { return e.UserName === sKey; })[0];
+                return {
+                    UserName: sKey,
+                    fullName: oEmp ? oEmp.fullName : sKey,
+                    budget:   mPrev[sKey] !== undefined ? mPrev[sKey] : ""
+                };
+            });
+            oVM.setProperty("/perEmployeeBudgets", aRows);
+        },
+
         onSaveTrip: function () {
             var that = this;
             var oBundle = this.getResourceBundle();
-            var oBudgetInput = this.byId("tripBudget");
-            var sUser        = this.byId("tripEmployee").getSelectedKey();
+            var oVM = this.getView().getModel("view");
+            var aUsers       = this.byId("tripEmployees").getSelectedKeys();
             var sName        = this.byId("tripName").getValue().trim();
             var sDestination = this.byId("tripDestination").getValue().trim();
             var oStartsAt    = this.byId("tripStartsAt").getDateValue();
             var oEndsAt      = this.byId("tripEndsAt").getDateValue();
-            var sBudget      = oBudgetInput.getValue().trim();
             var sDescription = this.byId("tripDescription").getValue().trim();
+            var bSame        = oVM.getProperty("/budgetSame");
 
-            if (!sUser || !sName || !oStartsAt || !oEndsAt) {
+            if (!aUsers.length || !sName || !oStartsAt || !oEndsAt) {
                 MessageToast.show(oBundle.getText("allTripsValidation"));
                 return;
             }
             if (oEndsAt < oStartsAt) {
-                MessageToast.show("Einddatum moet na startdatum liggen.");
+                MessageToast.show(oBundle.getText("allTripsEndBeforeStart"));
                 return;
             }
-            // budget is optioneel, maar als ingevuld moet het een geldig niet-negatief getal zijn
-            // (anders zou parseFloat("abc") stil null opslaan) → blokkeren met veld-feedback
-            oBudgetInput.setValueState("None");
-            if (sBudget !== "" && (!isFinite(Number(sBudget)) || Number(sBudget) < 0)) {
-                oBudgetInput.setValueState("Error");
-                oBudgetInput.setValueStateText(oBundle.getText("budgetInvalid"));
-                MessageToast.show(oBundle.getText("budgetInvalid"));
-                return;
-            }
+
+            // budget per medewerker bepalen: gedeeld (één veld) of per-medewerker (rijen). Een
+            // ingevuld budget moet een geldig niet-negatief getal zijn (anders sloeg parseFloat("abc")
+            // stil null op) → blokkeren met veld-feedback.
+            var mBudgetByUser = this._collectBudgets(aUsers, bSame);
+            if (!mBudgetByUser) { return; }   // validatie faalde (toast/veldstaat al gezet)
 
             var oComp = this.getOwnerComponent();
-            var mHeaders = { "Content-Type": "application/json", Accept: "application/json" };
-            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+            var mHeaders = oComp._fetchHeaders({ "Content-Type": "application/json", Accept: "application/json" });
 
-            var oBody = {
-                personUserName: sUser,
-                name:           sName,
-                destination:    sDestination,
-                startsAt:       oStartsAt.toISOString(),
-                endsAt:         oEndsAt.toISOString(),
-                budget:         sBudget ? parseFloat(sBudget) : null,
-                description:    sDescription
+            // één gedeeld shareId over alle kopieën → util/tripGroups groepeert ze tot één trip
+            var sShareId = this._uuid();
+            // snapshot van de wachtrij: vluchten worden ÉÉN keer geboekt op de representatieve kopie
+            // (gedeeld over de reizigers) — niet per medewerker, anders dubbeltellen de aggregaten
+            var aQueuedFlights = (oVM.getProperty("/newFlights") || []).slice();
+
+            var fnBody = function (sUser) {
+                var nBudget = mBudgetByUser[sUser];
+                return {
+                    personUserName: sUser,
+                    name:           sName,
+                    destination:    sDestination,
+                    startsAt:       oStartsAt.toISOString(),
+                    endsAt:         oEndsAt.toISOString(),
+                    budget:         (nBudget !== null && nBudget !== undefined) ? nBudget : null,
+                    description:    sDescription,
+                    shareId:        sShareId
+                };
+            };
+            var fnPostTrip = function (sUser) {
+                return fetch("/trips/OwnTrips", {
+                    method: "POST", headers: mHeaders, body: JSON.stringify(fnBody(sUser))
+                }).then(function (r) {
+                    if (!r.ok) { throw new Error("HTTP " + r.status); }
+                    return r.json();
+                });
             };
 
-            // snapshot van de wachtrij: pas POSTen zodra we de trip-UUID hebben
-            var aQueuedFlights = (this.getView().getModel("view").getProperty("/newFlights") || []).slice();
-
-            fetch("/trips/OwnTrips", {
-                method: "POST",
-                headers: mHeaders,
-                body: JSON.stringify(oBody)
-            })
-            .then(function (r) {
-                if (!r.ok) { throw new Error("HTTP " + r.status); }
-                return r.json();
-            })
-            .then(function (oCreated) {
-                // elke vlucht is een losse OwnFlight gekoppeld via tripId (de nieuwe UUID).
-                // allSettled (geen client-side transactie): één gefaalde vlucht mag de trip
-                // niet ongedaan maken → we tellen mislukkingen en melden ze.
-                var sNewTripId = oCreated.tripId;
-                return Promise.allSettled(aQueuedFlights.map(function (oFlight) {
+            // 1) representatieve kopie (eerste medewerker) eerst → we hebben zijn tripId nodig om de
+            //    gedeelde vluchten aan te koppelen. Faalt deze, dan faalt de hele aanmaak (catch).
+            var sFirstUser = aUsers[0];
+            fnPostTrip(sFirstUser).then(function (oCreated) {
+                var sRepTripId = oCreated.tripId;
+                // 2) vluchten één keer boeken op de representatieve trip. allSettled (geen client-side
+                //    transactie): één gefaalde vlucht mag de trip niet ongedaan maken.
+                var pFlights = Promise.allSettled(aQueuedFlights.map(function (oFlight) {
                     return fetch("/trips/OwnFlights", {
-                        method: "POST",
-                        headers: mHeaders,
+                        method: "POST", headers: mHeaders,
                         body: JSON.stringify({
-                            tripId:       sNewTripId,
+                            tripId:       sRepTripId,
                             flightNumber: oFlight.flightNumber,
                             airlineName:  oFlight.airlineName,
                             seatNumber:   oFlight.seatNumber,
@@ -339,18 +382,25 @@ sap.ui.define([
                         return r.json();
                     });
                 }));
+                // 3) de overige kopieën (zelfde shareId, eigen budget) — vluchten NIET dupliceren
+                var pOthers = Promise.allSettled(aUsers.slice(1).map(fnPostTrip));
+                return Promise.all([pFlights, pOthers]);
             })
-            .then(function (aSettled) {
-                var iFailed = (aSettled || []).filter(function (o) { return o.status === "rejected"; }).length;
+            .then(function (aResults) {
+                var iFlightsFailed = (aResults[0] || []).filter(function (o) { return o.status === "rejected"; }).length;
+                var iCopiesFailed  = (aResults[1] || []).filter(function (o) { return o.status === "rejected"; }).length;
                 that._oCreateDialog.close();
-                if (iFailed > 0) {
-                    MessageToast.show(oBundle.getText("allTripsCreatedFlightsPartial", [sName, iFailed]));
+                if (iCopiesFailed > 0) {
+                    MessageToast.show(oBundle.getText("allTripsCreatedCopiesPartial", [sName, iCopiesFailed]));
+                } else if (iFlightsFailed > 0) {
+                    MessageToast.show(oBundle.getText("allTripsCreatedFlightsPartial", [sName, iFlightsFailed]));
                 } else {
                     MessageToast.show(oBundle.getText("allTripsCreated", [sName]));
                 }
-                // nieuwe eigen-trip + vluchten → trip- én vlucht-caches evicten zodat de lijst,
-                // trip-detail én de Overview/Airports-aggregaten alles meteen meenemen
-                delete oComp._mTripsCache[sUser];
+                // nieuwe eigen-trip(s) + vluchten → trip- én vlucht-caches voor ALLE betrokken
+                // medewerkers evicten zodat de lijst, trip-detail én de Overview/Airports-aggregaten
+                // alles meteen meenemen
+                aUsers.forEach(function (sUser) { delete oComp._mTripsCache[sUser]; });
                 oComp._pTripData = null;
                 oComp._pFlightData = null;
                 oComp._pFlightAgg = null;
@@ -360,6 +410,55 @@ sap.ui.define([
             .catch(function (oError) {
                 Log.error("Create trip failed", oError);
                 MessageToast.show(oBundle.getText("allTripsCreateError"));
+            });
+        },
+
+        // het budget per gekozen medewerker bepalen + valideren. Gedeeld (bSame) → het ene veld op
+        // iedereen; anders → per-medewerker rijen. Retourneert { userName: number|null } of null bij
+        // een ongeldig (niet-numeriek/negatief) budget (toast + veldstaat al gezet).
+        _collectBudgets: function (aUsers, bSame) {
+            var oBundle = this.getResourceBundle();
+            var fnParse = function (sRaw) {
+                var s = String(sRaw == null ? "" : sRaw).trim();
+                if (s === "") { return null; }
+                if (!isFinite(Number(s)) || Number(s) < 0) { return undefined; } // ongeldig
+                return parseFloat(s);
+            };
+            var mBudgetByUser = {};
+            if (bSame) {
+                var oBudgetInput = this.byId("tripBudget");
+                oBudgetInput.setValueState("None");
+                var nShared = fnParse(oBudgetInput.getValue());
+                if (nShared === undefined) {
+                    oBudgetInput.setValueState("Error");
+                    oBudgetInput.setValueStateText(oBundle.getText("budgetInvalid"));
+                    MessageToast.show(oBundle.getText("budgetInvalid"));
+                    return null;
+                }
+                aUsers.forEach(function (sUser) { mBudgetByUser[sUser] = nShared; });
+            } else {
+                var aRows = this.getView().getModel("view").getProperty("/perEmployeeBudgets") || [];
+                var bInvalid = false;
+                aRows.forEach(function (oRow) {
+                    var n = fnParse(oRow.budget);
+                    if (n === undefined) { bInvalid = true; n = null; }
+                    mBudgetByUser[oRow.UserName] = n;
+                });
+                if (bInvalid) {
+                    MessageToast.show(oBundle.getText("budgetInvalid"));
+                    return null;
+                }
+            }
+            return mBudgetByUser;
+        },
+
+        // een shareId genereren (RFC4122 v4). crypto.randomUUID is beschikbaar op localhost/https;
+        // fallback voor oudere/onveilige contexten.
+        _uuid: function () {
+            if (window.crypto && window.crypto.randomUUID) { return window.crypto.randomUUID(); }
+            return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+                var r = Math.random() * 16 | 0;
+                return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
             });
         },
 
@@ -395,18 +494,40 @@ sap.ui.define([
         },
 
         onAddFlight: function () {
+            this._openFlightDialog(null);
+        },
+
+        // retourvlucht: open de vlucht-dialoog met enkel de luchthavens OMGEKEERD voorgevuld
+        // (heen→terug); nummer, stoel en de vertrek-/aankomsttijden vult de gebruiker zelf in.
+        onAddReturnFlight: function (oEvent) {
+            var oFlight = oEvent.getSource().getBindingContext("view").getObject();
+            // omgekeerde richting: bestemming → vertrek (de namen worden in onConfirmFlight opnieuw
+            // afgeleid uit de luchthavenlijst, dus hier volstaan de IATA-codes)
+            this._openFlightDialog({ fromIata: oFlight.toIata, toIata: oFlight.fromIata });
+        },
+
+        // de vlucht-dialoog openen. mPrefill (optioneel) vult enkel From/To voor — gebruikt voor de
+        // retourvlucht; de luchthaven-lijsten zijn dan al geladen (er is al een vlucht toegevoegd),
+        // dus setSelectedKey toont meteen het juiste label.
+        _openFlightDialog: function (mPrefill) {
             var that = this;
             this._ensureFlightLists();
+            var fnOpen = function () {
+                that._resetFlightForm();
+                if (mPrefill) {
+                    that.byId("flFrom").setSelectedKey(mPrefill.fromIata);
+                    that.byId("flTo").setSelectedKey(mPrefill.toIata);
+                }
+                that._oAddFlightDialog.open();
+            };
             if (this._oAddFlightDialog) {
-                this._resetFlightForm();
-                this._oAddFlightDialog.open();
+                fnOpen();
                 return;
             }
             this.loadFragment({ name: "primepath.dashboard.view.AddFlightDialog" })
                 .then(function (oDialog) {
                     that._oAddFlightDialog = oDialog;
-                    that._resetFlightForm();
-                    oDialog.open();
+                    fnOpen();
                 });
         },
 
@@ -424,6 +545,18 @@ sap.ui.define([
             ["flFrom", "flTo", "flAirline", "flDep", "flArr"].forEach(function (sId) {
                 this.byId(sId).setValueState("None");
             }, this);
+        },
+
+        // vertrek gewijzigd en aankomst nog leeg → aankomst voorvullen met dezelfde datum+tijd,
+        // zodat de gebruiker enkel de aankomsttijd hoeft aan te passen. Een reeds ingevulde aankomst
+        // NIET overschrijven; de aankomstdatum blijft vrij bewerkbaar voor overnacht-vluchten.
+        onFlightDepChange: function () {
+            var oDep = this.byId("flDep").getDateValue();
+            var oArr = this.byId("flArr");
+            if (oDep && !oArr.getDateValue()) {
+                oArr.setDateValue(new Date(oDep.getTime()));
+                oArr.setValueState("None");
+            }
         },
 
         onConfirmFlight: function () {

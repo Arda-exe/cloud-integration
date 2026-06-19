@@ -70,8 +70,10 @@ never built).
 - `srv/external/TripPin.{cds,xml}` — imported TripPin metadata; the reference for TripPin
   field/relation names.
 - `db/schema.cds` — the CAP data model: `TripExtension` (key `tripId` + `personUserName`;
-  `approvalStatus` + audit fields; the `company`/`team`/`notes` columns still exist but are
-  **unused by the current UI**).
+  `approvalStatus` + audit fields), `OwnTrip` (coordinator-created trips, key `tripId` UUID, with a
+  `shareId` linking the per-employee copies of a multi-employee trip), `OwnFlight` (flights on those
+  trips) and `PersonExtension` (team/company/department/status per employee). The `company`/`team`/
+  `notes` columns on `TripExtension`/`OwnTrip` still exist but are **unused by the current UI**.
 - `xs-security.json` — XSUAA role templates / scopes (TravelCoordinator, TeamLead, HR).
 - `mta.yaml`, `approuter/` — BTP Cloud Foundry deploy (approuter + XSUAA + Destination Service).
 
@@ -213,8 +215,11 @@ button are hidden here (`app>/showChrome`); the ShellBar's **Switch role** actio
 `Component.logout()`. On BTP the launchpad is served **publicly** (no login yet); clicking a tile
 does a full-page jump to the xsuaa-protected `/secure/` route, which makes the approuter present
 the **real XSUAA login**, after which the app opens under `/secure/` with the role/permissions from
-the XSUAA user (the tile only picks the landing tab, carried via `sessionStorage`). The approuter
-wiring lives in `approuter/xs-app.json` — see "Backend services".
+the XSUAA user (the tile picks the landing tab, carried via `sessionStorage`). Because the XSUAA
+token carries **all** of a multi-role user's collections at once, the chosen ("active") role is also
+sent to the backend on every request as an `X-Active-Role` header so the backend scopes data to
+exactly that role (see `srv/scope.js` under "Backend services"); switching role re-applies the
+header and resets the data caches. The approuter wiring lives in `approuter/xs-app.json`.
 
 **Overview** (`Overview.view/controller`) — landing page.
 - Period `DateRangeSelection` + quick-preset buttons (All time · Last month · Last 3 months ·
@@ -251,8 +256,9 @@ wiring lives in `approuter/xs-app.json` — see "Backend services".
 Employees toolbar button (Emphasized); **not** a top-level tab (honors *"No Trips landing tab"*) —
 its route maps to the Employees tab. **One row per REAL trip:** copies of the same shared trip are
 grouped by `ShareId` via `util/tripGroups.js` `groupTrips(perPerson, extMap)` (one group per
-`ShareId || user|tripId`; own trips stay singletons). Columns **Trip | Travellers & approvals |
-Total budget**.
+`ShareId || user|tripId`; multi-employee own trips share a generated `shareId` and group too, while
+single-employee own trips stay singletons). Columns **Trip | Travellers & approvals | Total
+budget**.
 - **Per-traveller** budget + approval: the Travellers cell nests a `VBox items="{view>members}"`
   (each member = one employee's copy) showing their own budget, status badge, and (coordinator-only)
   **Submit / Approve / Reject** — the action handlers read the bound **member** and are unchanged.
@@ -262,8 +268,13 @@ Total budget**.
   `TripsService.approve`/`rejectTrip`. Own-trip writes evict `_mTripsCache[user]` + `_pTripData`.
 - **Total budget** column = sum of the members' budgets. Search matches trip name + any traveller;
   the approval `Select` keeps a group when **any** member matches.
-- **Create trip** (coordinator): `CreateTripDialog.fragment.xml` (employee `ComboBox`, single
-  employee) → POST `/trips/OwnTrips`. Created own-trips have no `ShareId` → not grouped.
+- **Create trip** (coordinator): `CreateTripDialog.fragment.xml` — a `MultiComboBox` picks **one or
+  several employees**; a "Same budget for all travellers" checkbox toggles a shared budget vs one
+  budget per traveller. On save it generates one `shareId`, POSTs the representative copy first (to
+  get its `tripId`), books the queued flights **once** on that copy via `/trips/OwnFlights`, then
+  POSTs the remaining copies with the same `shareId`; caches for all affected employees are evicted.
+  An "Add flight" sub-dialog (`AddFlightDialog.fragment.xml`) queues flights, and a departure change
+  pre-fills an empty arrival with the same date+time.
 
 **Trip detail** (`TripDetail.view/controller`) — reached via a trip row (incl. All Trips). Content
 is **identical from any traveller's copy** (it aggregates by `ShareId`), so no per-copy routing.
@@ -305,10 +316,16 @@ is **identical from any traveller's copy** (it aggregates by `ShareId`), so no p
 
 ## Backend services (CAP)
 
-Owned by the backend side; the frontend consumes these as four named OData V4 models. Four proxy
-services (people/airports/airlines/trips) forward to TripPin, plus:
+Owned by the backend side; the frontend consumes the four data services as named OData V4 models
+and the user service via `fetch`. **Five CAP services** in total — four TripPin proxies
+(people/airports/airlines/trips) forward to TripPin, plus the user service:
 - `srv/user-service.{cds,js}` — `/user/whoami()` returning `{ id, roles[] }`; the frontend reads
   it for role-gating.
+- `srv/scope.js` — central role-based data scoping. A TeamLead sees only `Team Alpha`, HR only
+  `Contoso`, a TravelCoordinator everything (joined on `PersonExtension`). On BTP the XSUAA token
+  carries **all** of a user's role collections at once, so the frontend sends the active role as an
+  `X-Active-Role` header and `scopedUserNames(req)` honours it **only if `req.user.is(role)`** (no
+  privilege escalation), falling back to the most-privileged held role when the header is absent.
 - `TripExtension` (CAP DB, key `personUserName + tripId`) — the frontend uses only
   `approvalStatus`; `TripsService.approve` / `rejectTrip` actions update it.
 - `srv/trips-service.js` — a `PlanItems` handler returning flattened flight rows
@@ -341,23 +358,27 @@ it raises items here.
   `personUserName → ext` map) and joins client-side on `UserName`: team/company show as columns +
   filters in Employees and on the EmployeeDetail header.
 - **Persisting coordinator-created trips ("Add trip") (delivered).** Backed by `OwnTrip` (CAP DB,
-  key `tripId` UUID), exposed `/trips/OwnTrips` (Coordinator WRITE). The **All Trips** view (route
-  `allTrips`, reached via a button in Employees) hosts the create dialog (employee picker + name,
-  destination, dates, budget, description) and POSTs to `/trips/OwnTrips`.
-- **Flight (PlanItem) entry on created trips (parked).** Created `OwnTrip`s are trip-level only —
-  there is **no backend store for flights** on our own trips, so they show the "No flights recorded"
-  state in TripDetail. Capturing origin/destination airports, airline, times and seat would need a
-  backend PlanItem store keyed on the trip; not built.
+  key `tripId` UUID, with `shareId`), exposed `/trips/OwnTrips` (Coordinator WRITE). The **All
+  Trips** view (route `allTrips`, reached via a button in Employees) hosts the create dialog, which
+  creates a trip for **one or several employees at once**: one `OwnTrip` copy per employee, all
+  carrying one generated `shareId` (so `util/tripGroups` renders them as a single grouped trip),
+  with a shared budget or one budget per traveller.
+- **Flight entry on created trips (delivered).** Backed by `OwnFlight` (CAP DB, key `flightId` UUID,
+  linked by `tripId`), exposed `/trips/OwnFlights` (Coordinator WRITE). The create dialog's "Add
+  flight" sub-dialog queues flights (origin/destination airports, airline, number, seat, times) and
+  POSTs them after the trip. For a multi-employee trip the flights are stored **once on the
+  representative copy** and borrowed onto every traveller's copy in TripDetail, so they are never
+  double-counted in the Overview top-airlines/routes aggregates.
 
 ## Out of scope / decisions
 
 - Writing to TripPin; Events / unused TripPin data; real-time updates; a Trips landing tab;
   mobile-first (desktop primary, but stay responsive).
-- **Company/Team on trips** — removed. Approval is the only trip metadata. Company/team were
-  considered as *per-employee* fields but that needs a backend store that is **not built** (see
-  "What the frontend wants from the backend").
-- **"Add trip"** (a coordinator creating a trip in our own DB) — not built; needs a backend store
-  (same section).
+- **Company/Team on trips** — not surfaced in the UI. The `company`/`team` columns still exist on
+  `TripExtension`/`OwnTrip` but are unused; per-employee team/company live in `PersonExtension`
+  (delivered) and show in Employees. Approval is the only trip metadata the UI uses.
+- **"Add trip"** — **built** (see "Persisting coordinator-created trips"), including multi-employee
+  creation and per-trip flight entry (`OwnFlight`).
 - BTP UI serving / login flow — **now wired**: CAP serves the UI5 app (`server.js` Express static)
   fronted by the approuter (public launchpad → `/secure/` XSUAA login → app). See
   `approuter/xs-app.json` + "Launchpad / role login". (Originally a deferred html5/static-module

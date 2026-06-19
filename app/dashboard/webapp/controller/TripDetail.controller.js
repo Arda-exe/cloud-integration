@@ -81,8 +81,7 @@ sap.ui.define([
                 route: { has: false }
             });
 
-            var mHeaders = { Accept: "application/json" };
-            if (oComp._sAuthHeader) { mHeaders.Authorization = oComp._sAuthHeader; }
+            var mHeaders = oComp._fetchHeaders({ Accept: "application/json" });
 
             // trip + vluchten in ÉÉN Promise.all (net als de TripPin-tak): zo renderen de
             // vluchten/route nooit op een trip waarvan de header niet laadde. getCachedFlights en
@@ -109,27 +108,21 @@ sap.ui.define([
                 });
                 oModel.setProperty("/personName", that._sUserName);
                 oModel.setProperty("/periodText", formatters.formatPeriod(oTrip.startsAt, oTrip.endsAt));
-                // eigen trip = één reiziger → totaal = eigen budget, maar enkel als de trip telt
-                // (goedgekeurd/in behandeling); afgekeurd → 0
+                // voorlopig totaal = eigen budget (enkel als de trip telt: goedgekeurd/in behandeling;
+                // afgekeurd → 0); _loadSharedTrip overschrijft met de groepssom zodra die geladen is
                 oModel.setProperty("/totalBudget",
                     approval.countsInBudget(sStatus) ? (oTrip.budget || 0) : 0);
-                oModel.setProperty("/members", [{
-                    userName:    that._sUserName,
-                    name:        that._sUserName,
-                    budget:      oTrip.budget,
-                    statusKey:   sStatus,
-                    statusText:  that._statusText(sStatus),
-                    statusState: STATUS_STATE[sStatus] || "None"
-                }]);
                 oModel.setProperty("/busy", false);
 
-                // vluchten identiek toegepast als bij een TripPin-trip (tabel + routeblok + tellers)
+                // vluchten van deze kopie tonen (de representatieve kopie draagt de gedeelde vluchten)
                 if (aFlights && aFlights.length) {
                     that._applyFlights(aFlights);
                     that._applyRoute(aFlights, mByIata);
-                } else {
-                    oModel.setProperty("/flightsBusy", false);
                 }
+                // groeperen op shareId (zoals de TripPin-tak): toon álle reizigers met eigen budget +
+                // status, en leen de gedeelde vluchten als deze kopie er geen heeft. Een eigen trip
+                // met een uniek shareId is een groep van één → identiek aan het oude gedrag.
+                that._loadSharedTrip({ Budget: oTrip.budget }, aFlights, mByIata, sUserName, sTripIdRaw, iSeq);
             })
             .catch(function (oError) {
                 if (iSeq !== that._iLoadSeq) { return; }
@@ -327,7 +320,6 @@ sap.ui.define([
                     var aBorrowed = aFlightResults.find(function (a) { return a && a.length; }) || [];
                     that._applyFlights(aBorrowed);
                     that._applyRoute(aBorrowed, mByIata || {});
-                    that._loadAirportTripCounts();
                 });
             }).catch(function (oError) {
                 if (iSeq !== that._iLoadSeq) { return; }

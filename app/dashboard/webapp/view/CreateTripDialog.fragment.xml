@@ -10,10 +10,15 @@
                 labelSpanL="4" labelSpanM="4" emptySpanL="0" emptySpanM="0"
                 columnsL="1" columnsM="1">
                 <f:content>
-                    <Label text="{i18n>dlgEmployee} *" />
-                    <ComboBox id="tripEmployee" items="{view>/employees}" placeholder="Kies een medewerker">
+                    <!-- Eén dialoog voor 1..N medewerkers: één gekozen medewerker = N=1, meerdere =
+                         één gegroepeerde trip (gedeeld shareId). Naam/bestemming/data/beschrijving
+                         zijn gedeeld; budget kan gedeeld of per medewerker (zie checkbox). -->
+                    <Label text="{i18n>dlgEmployees} *" />
+                    <MultiComboBox id="tripEmployees" items="{view>/employees}"
+                        placeholder="{i18n>dlgEmployeesPlaceholder}"
+                        selectionChange=".onTripEmployeesChange">
                         <core:Item key="{view>UserName}" text="{view>fullName}" />
-                    </ComboBox>
+                    </MultiComboBox>
 
                     <Label text="Naam *" />
                     <Input id="tripName" placeholder="Naam van de trip" />
@@ -27,8 +32,23 @@
                     <Label text="Einddatum *" />
                     <DatePicker id="tripEndsAt" valueFormat="yyyy-MM-dd'T'HH:mm:ss'Z'" displayFormat="dd MMM yyyy" />
 
-                    <Label text="Budget (USD)" />
-                    <Input id="tripBudget" type="Number" placeholder="0" liveChange=".onBudgetLiveChange" />
+                    <!-- AAN (standaard): één budgetveld voor iedereen. UIT: één veld per gekozen
+                         medewerker (view>/perEmployeeBudgets, gesynct met de selectie). -->
+                    <Label text="{i18n>dlgBudgetLabel}" />
+                    <CheckBox id="tripBudgetSame" selected="true" text="{i18n>dlgBudgetSameText}"
+                        select=".onToggleBudgetSame" />
+
+                    <Label text="{i18n>dlgBudgetShared}" visible="{view>/budgetSame}" />
+                    <Input id="tripBudget" type="Number" placeholder="0" liveChange=".onBudgetLiveChange"
+                        visible="{view>/budgetSame}" />
+
+                    <Label text="{i18n>dlgBudgetPer}" visible="{= !${view>/budgetSame} }" />
+                    <VBox visible="{= !${view>/budgetSame} }" items="{view>/perEmployeeBudgets}">
+                        <HBox alignItems="Center" class="sapUiTinyMarginBottom">
+                            <Text text="{view>fullName}" width="14rem" class="sapUiTinyMarginEnd" />
+                            <Input value="{view>budget}" type="Number" placeholder="0" width="9rem" />
+                        </HBox>
+                    </VBox>
 
                     <Label text="Beschrijving" />
                     <TextArea id="tripDescription" rows="3" placeholder="Optionele beschrijving" growing="true" />
@@ -46,7 +66,23 @@
                 </Toolbar>
                 <List items="{view>/newFlights}" mode="Delete" delete=".onRemoveQueuedFlight"
                     noDataText="{i18n>newFlightsNoData}">
-                    <StandardListItem title="{view>summary}" description="{view>detail}" icon="sap-icon://flight" />
+                    <!-- per vlucht een "retourvlucht"-knop: opent de vlucht-dialoog met de
+                         luchthavens omgekeerd voorgevuld (heen→terug); de rest vult de gebruiker zelf -->
+                    <CustomListItem>
+                        <HBox alignItems="Center" justifyContent="SpaceBetween" width="100%"
+                            class="sapUiTinyMarginBegin sapUiTinyMarginEnd">
+                            <HBox alignItems="Center">
+                                <core:Icon src="sap-icon://flight" class="sapUiTinyMarginEnd" />
+                                <VBox>
+                                    <Text text="{view>summary}" />
+                                    <Text text="{view>detail}" />
+                                </VBox>
+                            </HBox>
+                            <Button text="{i18n>btnReturnFlight}" icon="sap-icon://return-to-previous"
+                                type="Transparent" tooltip="{i18n>btnReturnFlight}"
+                                press=".onAddReturnFlight" />
+                        </HBox>
+                    </CustomListItem>
                 </List>
             </VBox>
         </content>

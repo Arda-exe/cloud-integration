@@ -24,7 +24,8 @@
         "users": {
           "coordinator": { "password": "test", "roles": ["TravelCoordinator"] },
           "teamlead": { "password": "test", "roles": ["TeamLead"] },
-          "hr": { "password": "test", "roles": ["HR"] }
+          "hr": { "password": "test", "roles": ["HR"] },
+          "super": { "password": "test", "roles": ["TravelCoordinator", "TeamLead", "HR"] }
         }
       },
       "TripPin": {

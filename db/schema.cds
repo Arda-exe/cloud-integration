@@ -24,6 +24,9 @@ entity OwnTrip {
     approvalStatus    : String(20) default 'pending';
     company           : String(100);
     team              : String(100);
+    // gedeelde id over de per-medewerker kopieën van één multi-medewerker trip (spiegelt
+    // TripPin's ShareId): util/tripGroups groepeert kopieën met hetzelfde shareId tot één trip.
+    shareId           : String(36);
 }
 
 entity OwnFlight {

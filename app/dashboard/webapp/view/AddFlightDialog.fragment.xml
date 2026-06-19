@@ -35,7 +35,7 @@
                     <Input id="flSeat" placeholder="bv. 14C" />
 
                     <Label text="{i18n>colDeparture} *" />
-                    <DateTimePicker id="flDep" displayFormat="dd MMM yyyy HH:mm" />
+                    <DateTimePicker id="flDep" displayFormat="dd MMM yyyy HH:mm" change=".onFlightDepChange" />
 
                     <Label text="{i18n>colArrival} *" />
                     <DateTimePicker id="flArr" displayFormat="dd MMM yyyy HH:mm" />

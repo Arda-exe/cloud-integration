@@ -13,9 +13,9 @@ by a two-person team: **Arda** (frontend) and **Simon** (backend). Deployment ta
 
 | Layer | Technology |
 |---|---|
-| Backend | SAP CAP (Node.js, `@sap/cds` v9) with four OData V4 services: people, trips, airlines, airports |
-| External data | Public [TripPin OData V4 service](https://services.odata.org/V4/TripPinService) (read-only) |
-| Own data | `TripExtension` entity (approval status, company, team, notes), keyed on `personUserName + tripId` — SQLite locally, SAP HANA Cloud in production |
+| Backend | SAP CAP (Node.js, `@sap/cds` v9) with five OData V4 services: people, trips, airlines, airports, and user (whoami / role-gating) |
+| External data | Public [TripPin OData V4 service](https://services.odata.org/V4/TripPinService) (read-only), reached with a direct HTTP call |
+| Own data | CAP-managed tables: `TripExtension` (approval status for TripPin trips), `OwnTrip` / `OwnFlight` (coordinator-created trips and their flights), `PersonExtension` (team / company) — SQLite locally, SAP HANA Cloud in production |
 | Frontend | Freestyle SAPUI5 1.136 (XML views + JS controllers), theme `sap_fiori_3`, OData V4 models |
 | Map | Leaflet + OpenStreetMap |
 | Security | XSUAA with three roles: TravelCoordinator (read/write, approve/reject), TeamLead (read, own team), HR (read, reporting) |
@@ -48,26 +48,30 @@ Local login uses mocked basic auth. Test users (password `test` for all):
 
 ## Features
 
-- **Overview tab** — KPI tiles (employees, trips, total trip budget, airports,
-  airlines) and a "Top travellers" card.
-- **Employees tab** — searchable employee list with click-through to a detail page:
-  profile (name, emails, home city), chronological trips with a period filter, and a
-  "location lookup" that shows where the employee was on a chosen date (on a trip, or
-  at home).
-- **Trip detail** — click any trip to open a detail page showing the trip facts
-  (period, budget, description, tags) and its approval metadata (status, company, team,
-  notes).
+- **Launchpad / role login** — pick a role (TravelCoordinator · TeamLead · HR) to enter
+  the dashboard. Locally each tile logs in as the matching mock user; on BTP the active
+  role is enforced end-to-end (XSUAA + an `X-Active-Role` header), so a user who holds
+  several role collections is scoped to the single role they are currently playing.
+- **Overview tab** — a period filter with quick presets, KPI tiles (employees, trips,
+  total trip budget, airports, airlines), a "Top travellers" card and Top airlines /
+  Top routes bar charts.
+- **Employees tab** — searchable employee list with status / team / company filters and
+  click-through to a detail page: profile (name, emails, home city), trip counters,
+  chronological trips with a period filter, and a "location lookup" that shows where the
+  employee was on a chosen date (on a trip, or at home).
+- **All trips** — one row per real trip, with copies of a shared trip grouped together;
+  per-traveller budget and approval status. Coordinators can **create a trip for one or
+  several employees at once** (a shared budget or one per traveller, with optional
+  flights) and submit / approve / reject each traveller's copy.
+- **Trip detail** — flight-level route (legs, airlines, connecting airports with
+  cross-navigation to the airport map), each traveller's own budget and approval status,
+  and a combined budget. A shared trip shows the same flights on every traveller's copy.
 - **Airports tab** — world map with a marker per airport plus a searchable list
-  (name, IATA/ICAO codes, city, country).
-
-### Planned
-
-- Flight-level trip details (legs, airlines, connecting airports) and cross-navigation
-  from a trip to its airports and airlines
-- Top airlines & top routes on the Overview tab
-- Global search across employees, airports and airlines
-- Coordinator actions in the UI (add trip, approve/reject)
-- Deployment descriptors for BTP (mta.yaml, approuter)
+  (name, IATA/ICAO codes, city, country) and a detail panel listing the trips routed via
+  that airport.
+- **Global search** — ShellBar search across employees and airports.
+- **BTP deployment** — `mta.yaml` + approuter descriptors wire the public launchpad and
+  the XSUAA-protected app (CAP serves the UI; the approuter fronts the XSUAA login).
 
 ## Repository layout
 

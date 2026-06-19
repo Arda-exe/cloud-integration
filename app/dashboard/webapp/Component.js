@@ -54,6 +54,9 @@ sap.ui.define([
             // de publieke launchpad draait onder /dashboard/webapp/ zónder login
             this._bSecure = window.location.pathname.indexOf("/secure/") === 0;
             this._sAuthHeader = null;
+            // de rol die de gebruiker nu SPEELT → als X-Active-Role-header naar de backend, zodat
+            // die per rol scopet (zie _setActiveRole / srv/scope.js)
+            this._sActiveRole = null;
 
             // user: "has*" = welke rollen de gebruiker BEZIT (stuurt de launchpad-tegels);
             // "is*"/roleLabel/activeRole = de ENE rol die nu actief gespeeld wordt (stuurt de
@@ -147,8 +150,7 @@ sap.ui.define([
                         });
                     });
 
-                var mHeaders = { Accept: "application/json" };
-                if (this._sAuthHeader) { mHeaders.Authorization = this._sAuthHeader; }
+                var mHeaders = this._fetchHeaders({ Accept: "application/json" });
                 var pOwn = fetch(
                     "/trips/OwnTrips?$filter=personUserName eq '" + encodeURIComponent(sUserName) + "'",
                     { headers: mHeaders }
@@ -164,6 +166,9 @@ sap.ui.define([
                                 Budget:         o.budget,
                                 Description:    o.description || o.destination || "",
                                 approvalStatus: o.approvalStatus,
+                                // gedeeld id over de kopieën van een multi-medewerker trip →
+                                // util/tripGroups groepeert ze tot één trip (zoals TripPin's ShareId)
+                                ShareId:        o.shareId || null,
                                 _isOwn:         true
                             };
                         });
@@ -218,8 +223,7 @@ sap.ui.define([
         // weg uit "Top airlines" (dat groepeert op airlineCode). V4 GUID-literal: GEEN quotes.
         _loadOwnFlights: function (sTripId, sKey) {
             var that = this;
-            var mHeaders = { Accept: "application/json" };
-            if (this._sAuthHeader) { mHeaders.Authorization = this._sAuthHeader; }
+            var mHeaders = this._fetchHeaders({ Accept: "application/json" });
             return Promise.all([
                 fetch("/trips/OwnFlights?$filter=tripId eq " + sTripId + "&$top=" + constants.PAGE_SIZE_FLIGHTS,
                     { headers: mHeaders })
@@ -435,21 +439,15 @@ sap.ui.define([
         // lokale mock-auth: Basic-header in de 4 OData-modellen injecteren + user-context zetten.
         // Gedeeld door loginAs (rol-klik) en init (herstel uit sessionStorage na refresh).
         _applyLocalAuth: function (sRole) {
-            var that = this;
             this._sAuthHeader = "Basic " + btoa(ROLE_USER[sRole] + ":test");
-            ["people", "trips", "airlines", "airports"].forEach(function (sName) {
-                try {
-                    that.getModel(sName).changeHttpHeaders({ Authorization: that._sAuthHeader });
-                } catch (e) {}
-            });
-            // nieuwe identiteit → de gescopete data van de vorige rol weggooien (zie _resetDataCaches)
-            this._resetDataCaches();
             // lokaal heeft de mock-user precies één rol: die bezit hij én speelt hij meteen.
             var oApp = this.getModel("app");
             oApp.setProperty("/user/roles", [sRole]);
             oApp.setProperty("/user/hasCoordinator", sRole === "TravelCoordinator");
             oApp.setProperty("/user/hasTeamLead", sRole === "TeamLead");
             oApp.setProperty("/user/hasHR", sRole === "HR");
+            // _setActiveRole past de headers (Authorization + X-Active-Role) toe op de 4 modellen
+            // én reset/refresht de caches → de nieuwe identiteit haalt verse, gescopete data op.
             this._setActiveRole(sRole);
             this._loadCurrentUser();
         },
@@ -479,6 +477,37 @@ sap.ui.define([
             oApp.setProperty("/user/isHR", sRole === "HR");
             oApp.setProperty("/user/activeRole", sRole);
             oApp.setProperty("/user/roleLabel", this._roleLabel([sRole]));
+            // De backend scopet data per ACTIEVE rol (srv/scope.js leest de X-Active-Role-header):
+            // op BTP draagt het XSUAA-token álle rol-collecties tegelijk, dus zonder dit zou de
+            // meest-geprivilegieerde rol altijd winnen en zou een multi-rol-gebruiker als TeamLead/
+            // HR nog alles zien. De header MOET dus op de modellen/fetches staan VÓÓR de cache-reset
+            // + refresh, anders haalt de refresh nog data op met de vorige (of zonder) actieve rol.
+            this._sActiveRole = sRole;
+            this._applyModelHeaders();
+            this._resetDataCaches();
+        },
+
+        // de custom HTTP-headers (Authorization lokaal + X-Active-Role overal) op de 4 OData-
+        // modellen zetten. Eén bron van waarheid, gedeeld met de ruwe fetch()-calls via
+        // _fetchHeaders. Een undefined-waarde verwijdert de header (BTP heeft geen Authorization).
+        _applyModelHeaders: function () {
+            var mHeaders = {
+                Authorization: this._sAuthHeader || undefined,
+                "X-Active-Role": this._sActiveRole || undefined
+            };
+            ["people", "trips", "airlines", "airports"].forEach(function (sName) {
+                try { this.getModel(sName).changeHttpHeaders(mHeaders); } catch (e) {}
+            }, this);
+        },
+
+        // dezelfde headers voor de RUWE fetch()-calls op rol-gescopete CAP-entiteiten (/trips,
+        // /people): Authorization (lokaal) + X-Active-Role (overal), zodat de backend ze identiek
+        // scopet als de OData-modellen. De whoami-call heeft dit NIET nodig (rol-onafhankelijk).
+        _fetchHeaders: function (mBase) {
+            var mHeaders = Object.assign({}, mBase || {});
+            if (this._sAuthHeader) { mHeaders.Authorization = this._sAuthHeader; }
+            if (this._sActiveRole) { mHeaders["X-Active-Role"] = this._sActiveRole; }
+            return mHeaders;
         },
 
         // BTP, ná login: één van je rollen "spelen" → scope de UI, onthoud de keuze (refresh) en
